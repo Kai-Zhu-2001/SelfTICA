@@ -211,7 +211,7 @@ class PytorchGNN: public Colvar
   bool groups_have_intersection(void);
   void find_active_atoms(int n_threads);
   void mark_edges_to_erase(int n_threads);
-  std::vector<std::pair<int64_t, int64_t>> intergroup_list(PLMD::Tensor box, const std::vector<PLMD::Vector> x_local, int n_threads);
+  std::vector<PLMD::Vector> intergroup_list(std::vector<std::pair<int64_t, int64_t>> pairs, PLMD::Tensor box, const std::vector<PLMD::Vector> x_local, int n_threads);
 
 public:
   explicit PytorchGNN(const ActionOptions&);
@@ -941,67 +941,6 @@ void PytorchGNN::calculate()
       torch::TensorOptions().dtype(torch::kInt64)
     );
   }
-  if (atom_list_groupa.size() > 0) {
-    std::vector<std::pair<int64_t, int64_t>> pairs = intergroup_list(box, x_local, n_threads);
-    int n_fixed_edges = pairs.size();
-    std::vector<std::vector<int64_t>> fixed_edge_index_vector;
-    fixed_edge_index_vector.resize(2, std::vector<int64_t>(n_fixed_edges));
-    #pragma omp parallel for num_threads(n_threads)
-    for (int i = 0; i < n_fixed_edges; i++) {
-      fixed_edge_index_vector[0][i] = pairs[i].first;
-      fixed_edge_index_vector[1][i] = pairs[i].second;
-    }
-    std::map<std::pair<int64_t, int64_t>, bool> fixed_edge_map;
-    for (size_t i = 0; i < n_fixed_edges; i++) {
-      fixed_edge_map[{fixed_edge_index_vector[0][i], fixed_edge_index_vector[1][i]}] = true;
-    }
-    std::vector<char> to_erase(n_edges, 0);
-    #pragma omp parallel for num_threads(n_threads)
-    for (size_t i = 0; i < n_edges; i++) {
-      if (fixed_edge_map.find({edge_index_vector[0][i], edge_index_vector[1][i]}) != fixed_edge_map.end()) {
-        to_erase[i] = 1;
-      }
-    }
-    std::vector<int64_t> new_senders;
-    std::vector<int64_t> new_receivers;
-    new_senders.reserve(n_edges);
-    new_receivers.reserve(n_edges);
-    #pragma omp parallel for num_threads(n_threads)
-    for (size_t i = 0; i < n_edges; i++) {
-      if (!to_erase[i]) {
-        #pragma omp critical
-        {
-          new_senders.push_back(edge_index_vector[0][i]);
-          new_receivers.push_back(edge_index_vector[1][i]);
-        }
-      }
-    }
-    edge_index_vector[0] = std::move(new_senders);
-    edge_index_vector[1] = std::move(new_receivers);
-    n_edges = edge_index_vector[0].size();
-    std::vector<int64_t> combined_edge_senders(n_edges + n_fixed_edges);
-    std::vector<int64_t> combined_edge_receivers(n_edges + n_fixed_edges);
-    #pragma omp parallel for num_threads(n_threads)
-    for (size_t i = 0; i < n_fixed_edges; i++) {
-      combined_edge_senders[i] = fixed_edge_index_vector[0][i];
-      combined_edge_receivers[i] = fixed_edge_index_vector[1][i];
-    }
-    #pragma omp parallel for num_threads(n_threads)
-    for (size_t i = 0; i < n_edges; i++) {
-      combined_edge_senders[n_fixed_edges + i] = edge_index_vector[0][i];
-      combined_edge_receivers[n_fixed_edges + i] = edge_index_vector[1][i];
-    }
-    edge_labels = torch::cat({
-      torch::ones(n_fixed_edges, torch::TensorOptions().dtype(torch::kInt64)),
-      torch::zeros(n_edges, torch::TensorOptions().dtype(torch::kInt64))
-    });
-    n_edges += n_fixed_edges;
-    torch::Tensor senders = torch::tensor(combined_edge_senders, torch::TensorOptions().dtype(torch::kInt64));
-    torch::Tensor receivers = torch::tensor(combined_edge_receivers, torch::TensorOptions().dtype(torch::kInt64));
-    edge_index = torch::vstack({senders, receivers});
-  }  
-  edge_index = edge_index.to(device);
-  edge_labels = edge_labels.to(device);
 
   // edge shifts
   torch::Tensor shifts;
@@ -1033,7 +972,105 @@ void PytorchGNN::calculate()
     shifts = torch::zeros({n_edges, 3}, torch_float_dtype);
     unit_shifts = torch::zeros({n_edges, 3}, torch_float_dtype);
   }
+  if (atom_list_groupa.size() > 0) {
+    std::vector<std::pair<int64_t, int64_t>> pairs;
+    for (size_t i = 0; i < atom_list_groupa.size(); i++) {
+      for (size_t j = 0; j < atom_list_groupb.size(); j++) {
+        pairs.emplace_back(i, j);
+        pairs.emplace_back(j, i);
+      }
+    }
+    int n_fixed_edges = pairs.size();
+    std::vector<std::vector<int64_t>> fixed_edge_index_vector;
+    fixed_edge_index_vector.resize(2, std::vector<int64_t>(n_fixed_edges));
+    #pragma omp parallel for num_threads(n_threads)
+    for (int i = 0; i < n_fixed_edges; i++) {
+      fixed_edge_index_vector[0][i] = pairs[i].first;
+      fixed_edge_index_vector[1][i] = pairs[i].second;
+    }
+    std::vector<PLMD::Vector>  deltas = intergroup_list(pairs, box, x_local, n_threads);
+    std::vector<std::vector<double>> delta_data;
+    for (const auto& delta : deltas) {
+      delta_data.push_back({delta[0], delta[1], delta[2]});
+    }
+    std::vector<double> flattened_delta_data;
+    for (const auto& row : delta_data) {
+        flattened_delta_data.insert(flattened_delta_data.end(), row.begin(), row.end());
+    }
+    torch::Tensor delta_tensor_reshaped = torch::tensor(flattened_delta_data, torch_float_dtype);
+    torch::Tensor delta_tensor = delta_tensor_reshaped.view({n_fixed_edges, 3});
 
+    torch::Tensor senders = torch::tensor(fixed_edge_index_vector[0], torch::TensorOptions().dtype(torch::kInt64));
+    torch::Tensor receivers = torch::tensor(fixed_edge_index_vector[1], torch::TensorOptions().dtype(torch::kInt64));
+    torch::Tensor fixed_edge_index = torch::vstack({senders, receivers});
+    torch::Tensor fixed_unit_shifts = torch::round((delta_tensor * to_ang) / torch::diagonal(cell, 0));
+    torch::Tensor fixed_shifts = torch::matmul(fixed_unit_shifts, cell);
+    // 打印 fixed_edge_index
+    std::cout << "fixed_shifts: " << std::endl;
+    std::cout << fixed_unit_shifts << std::endl;
+    
+    // // 打印 fixed_unit_shifts
+    // std::cout << "fixed_unit_shifts: " << std::endl;
+    std::cout << fixed_unit_shifts << std::endl;
+    edge_index = torch::cat({edge_index, fixed_edge_index}, 1);
+    shifts = torch::cat({shifts, fixed_shifts}, 0);
+    unit_shifts = torch::cat({unit_shifts, fixed_unit_shifts}, 0);
+    edge_labels = torch::cat({
+        edge_labels,
+        torch::ones({fixed_edge_index.size(1)}, torch::kInt64)
+    }, 0);
+    // std::map<std::pair<int64_t, int64_t>, bool> fixed_edge_map;
+    // for (size_t i = 0; i < n_fixed_edges; i++) {
+    //   fixed_edge_map[{fixed_edge_index_vector[0][i], fixed_edge_index_vector[1][i]}] = true;
+    // }
+    // std::vector<char> to_erase(n_edges, 0);
+    // #pragma omp parallel for num_threads(n_threads)
+    // for (size_t i = 0; i < n_edges; i++) {
+    //   if (fixed_edge_map.find({edge_index_vector[0][i], edge_index_vector[1][i]}) != fixed_edge_map.end()) {
+    //     to_erase[i] = 1;
+    //   }
+    // }
+    // std::vector<int64_t> new_senders;
+    // std::vector<int64_t> new_receivers;
+    // new_senders.reserve(n_edges);
+    // new_receivers.reserve(n_edges);
+    // #pragma omp parallel for num_threads(n_threads)
+    // for (size_t i = 0; i < n_edges; i++) {
+    //   if (!to_erase[i]) {
+    //     #pragma omp critical
+    //     {
+    //       new_senders.push_back(edge_index_vector[0][i]);
+    //       new_receivers.push_back(edge_index_vector[1][i]);
+    //     }
+    //   }
+    // }
+    // edge_index_vector[0] = std::move(new_senders);
+    // edge_index_vector[1] = std::move(new_receivers);
+    // n_edges = edge_index_vector[0].size();
+    // std::vector<int64_t> combined_edge_senders(n_edges + n_fixed_edges);
+    // std::vector<int64_t> combined_edge_receivers(n_edges + n_fixed_edges);
+    // #pragma omp parallel for num_threads(n_threads)
+    // for (size_t i = 0; i < n_fixed_edges; i++) {
+    //   combined_edge_senders[i] = fixed_edge_index_vector[0][i];
+    //   combined_edge_receivers[i] = fixed_edge_index_vector[1][i];
+    // }
+    // #pragma omp parallel for num_threads(n_threads)
+    // for (size_t i = 0; i < n_edges; i++) {
+    //   combined_edge_senders[n_fixed_edges + i] = edge_index_vector[0][i];
+    //   combined_edge_receivers[n_fixed_edges + i] = edge_index_vector[1][i];
+    // }
+    // edge_labels = torch::cat({
+    //   torch::ones(n_fixed_edges, torch::TensorOptions().dtype(torch::kInt64)),
+    //   torch::zeros(n_edges, torch::TensorOptions().dtype(torch::kInt64))
+    // });
+    // n_edges += n_fixed_edges;
+    // torch::Tensor senders = torch::tensor(combined_edge_senders, torch::TensorOptions().dtype(torch::kInt64));
+    // torch::Tensor receivers = torch::tensor(combined_edge_receivers, torch::TensorOptions().dtype(torch::kInt64));
+    // edge_index = torch::vstack({senders, receivers});
+  }  
+
+  edge_index = edge_index.to(device);
+  edge_labels = edge_labels.to(device);
   shifts = shifts.to(device);
   unit_shifts = unit_shifts.to(device);
 
@@ -1302,45 +1339,45 @@ void PytorchGNN::find_active_atoms(int n_threads) {
   }
 }
 
-std::vector<std::pair<int64_t, int64_t>> PytorchGNN::intergroup_list(PLMD::Tensor box, const std::vector<PLMD::Vector> x_local, int n_threads) {
-  std::vector<std::pair<int64_t, int64_t>> pairs;
-  for (size_t i = 0; i < atom_list_groupa.size(); i++) {
+std::vector<PLMD::Vector> PytorchGNN::intergroup_list(std::vector<std::pair<int64_t, int64_t>> pairs, PLMD::Tensor box, const std::vector<PLMD::Vector> x_local, int n_threads) {
+  std::vector<PLMD::Vector> shifts;
+  std::vector<double> distances;
+  for (const auto& pair : pairs) {
+    size_t i = pair.first;
+    size_t j = pair.second;
     PLMD::Vector pos1 = x_local[i];
-    for (size_t j = 0; j < atom_list_groupb.size(); j++) {
-      PLMD::Vector pos2 = x_local[j];
-      PLMD::Vector delta = pos2 - pos1;
-      if (pbc) {
-        PLMD::Vector best_shift = {0, 0, 0};
-        double min_dist = std::numeric_limits<double>::infinity();
-        #pragma omp parallel for reduction(min:min_dist) private(best_shift) num_threads(n_threads)
-        for (int dx = -1; dx <= 1; ++dx) {
-          for (int dy = -1; dy <= 1; ++dy) {
-            for (int dz = -1; dz <= 1; ++dz) {
-              PLMD::Vector shift = PLMD::Vector(box[0][0], box[1][0], box[2][0]) * dx + 
-                                   PLMD::Vector(box[0][1], box[1][1], box[2][1]) * dy +
-                                   PLMD::Vector(box[0][2], box[1][2], box[2][2]) * dy;
-              PLMD::Vector shifted_delta = delta + shift;
-              double dist = std::sqrt(shifted_delta[0] * shifted_delta[0] +
-                                      shifted_delta[1] * shifted_delta[1] +
-                                      shifted_delta[2] * shifted_delta[2]);
-              #pragma omp critical
-              if (dist < min_dist) {
-                min_dist = dist;
-                best_shift = shift;
-              }
+    PLMD::Vector pos2 = x_local[j];
+    PLMD::Vector delta = pos2 - pos1;
+    if (pbc) {
+      PLMD::Vector best_shift = {0, 0, 0};
+      double min_dist = std::numeric_limits<double>::infinity();
+      #pragma omp parallel for num_threads(n_threads)
+      for (int dx = -1; dx <= 1; ++dx) {
+        for (int dy = -1; dy <= 1; ++dy) {
+          for (int dz = -1; dz <= 1; ++dz) {
+            PLMD::Vector shift = PLMD::Vector(box[0][0], box[1][0], box[2][0]) * dx +
+                                 PLMD::Vector(box[0][1], box[1][1], box[2][1]) * dy +
+                                 PLMD::Vector(box[0][2], box[1][2], box[2][2]) * dz;
+            PLMD::Vector shifted_delta = delta + shift;
+            double dist = std::sqrt(shifted_delta[0] * shifted_delta[0] +
+                                    shifted_delta[1] * shifted_delta[1] +
+                                    shifted_delta[2] * shifted_delta[2]);
+            if (dist < min_dist) {
+              min_dist = dist;
+              best_shift = shift;
             }
           }
         }
-        delta += best_shift;
       }
-      pairs.emplace_back(i, j);
-      pairs.emplace_back(j, i);
+      shifts.push_back(best_shift);
+      // distances.push_back(min_dist);
+    } else {
+      shifts.push_back({0, 0, 0});
+      // distances.push_back(std::sqrt(delta[0] * delta[0] + delta[1] * delta[1] + delta[2] * delta[2]));
     }
   }
-  return pairs;
+  return shifts;
 }
-
-
 
 } // pytorch_gnn
 
