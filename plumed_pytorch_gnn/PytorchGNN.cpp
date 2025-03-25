@@ -962,55 +962,60 @@ void PytorchGNN::calculate()
         torch::index_select(positions_s, 1, edge_index[0])
         - torch::index_select(positions_s, 1, edge_index[1])
       );
-      unit_shifts = torch::round(deltas);
+      unit_shifts = torch::round(deltas).transpose(1, 0);
       shifts = torch::matmul(
-        cell.transpose(1, 0), unit_shifts
+        cell.transpose(1, 0), unit_shifts.transpose(1, 0)
       ).transpose(1, 0);
     }
   } else {
     shifts = torch::zeros({n_edges, 3}, torch_float_dtype);
     unit_shifts = torch::zeros({n_edges, 3}, torch_float_dtype);
   }
+  
   if (atom_list_groupa.size() > 0) {
-    std::vector<std::pair<int64_t, int64_t>> pairs;
-    for (size_t i = 0; i < atom_list_groupa.size(); i++) {
-      for (size_t j = 0; j < atom_list_groupb.size(); j++) {
-        pairs.emplace_back(i, j);
-        pairs.emplace_back(i, j);
-      }
-    }
-    
-    int n_fixed_edges = pairs.size();
+    int groupa_size = atom_list_groupa.size();
+    int groupb_size = atom_list_groupb.size();
+    int pairs_size = atom_list_groupa.size() * atom_list_groupb.size();
+    int n_fixed_edges = pairs_size * 2;
     std::vector<std::vector<int64_t>> fixed_edge_index_vector;
     fixed_edge_index_vector.resize(2, std::vector<int64_t>(n_fixed_edges));
-    #pragma omp parallel for num_threads(n_threads)
-    for (int i = 0; i < n_fixed_edges; i++) {
-      fixed_edge_index_vector[0][i] = pairs[i].first;
-      fixed_edge_index_vector[1][i] = pairs[i].second;
+    // #pragma omp parallel for num_threads(n_threads)
+    int idx = 0;
+    for (int i = 0; i <  groupa_size; i++) {
+      for (int j = 0; j < groupb_size; j++) {
+      fixed_edge_index_vector[0][idx] = i;
+      fixed_edge_index_vector[1][idx] = j + groupa_size;
+      fixed_edge_index_vector[0][pairs_size + idx] = j + groupa_size;
+      fixed_edge_index_vector[1][pairs_size + idx] = i;
+      idx++;
+      }
     }
     torch::Tensor senders = torch::tensor(fixed_edge_index_vector[0], torch::TensorOptions().dtype(torch::kInt64));
     torch::Tensor receivers = torch::tensor(fixed_edge_index_vector[1], torch::TensorOptions().dtype(torch::kInt64));
     torch::Tensor fixed_edge_index = torch::vstack({senders, receivers});
-
     torch::Tensor fixed_unit_shifts = torch::zeros({n_fixed_edges, 3}, positions.options());
+    torch::Tensor fixed_shifts = torch::zeros({n_fixed_edges, 3}, positions.options());
     torch::Tensor indices_i = fixed_edge_index.index({0, torch::indexing::Slice()});
     torch::Tensor indices_j = fixed_edge_index.index({1, torch::indexing::Slice()});
-    torch::Tensor pos1 = positions.index({indices_i});
-    torch::Tensor pos2 = positions.index({indices_j});
-    torch::Tensor dist = pos2 - pos1;    
     if (pbc) {
+      torch::Tensor cell_inv;
+      torch::Tensor pos1 = positions.index({indices_i});
+      torch::Tensor pos2 = positions.index({indices_j});
+      torch::Tensor dist = pos2 - pos1;
       torch::Tensor best_delta = torch::zeros({n_fixed_edges, 3}, positions.options());
       torch::Tensor min_dist = torch::full({n_fixed_edges}, INFINITY, positions.options());
-      #pragma omp parallel num_threads(n_threads)
+      // #pragma omp parallel num_threads(n_threads)
       {
         torch::Tensor local_min_dist = min_dist.clone();
         torch::Tensor local_best_delta = best_delta.clone();
-        #pragma omp for nowait
+        // #pragma omp for nowait
         for (int dx = -1; dx <= 1; ++dx) {
           for (int dy = -1; dy <= 1; ++dy) {
             for (int dz = -1; dz <= 1; ++dz) {
               torch::Tensor delta = torch::tensor({dx, dy, dz}, positions.options());
-              torch::Tensor shifted_delta = dist + torch::matmul(delta, cell);
+              torch::Tensor shifted_delta;
+              shifted_delta = dist + torch::matmul(delta, cell);
+              shifted_delta = dist + torch::matmul(delta, cell);
               torch::Tensor dist_norm = torch::norm(shifted_delta, 2, 1);
               torch::Tensor mask = dist_norm < local_min_dist;
               local_min_dist.index_put_({mask}, dist_norm.index({mask}));
@@ -1018,7 +1023,7 @@ void PytorchGNN::calculate()
             }
           }
         }
-        #pragma omp critical
+        // #pragma omp critical
         {
           torch::Tensor final_mask = local_min_dist < min_dist;
           min_dist.index_put_({final_mask}, local_min_dist.index({final_mask}));
@@ -1026,29 +1031,44 @@ void PytorchGNN::calculate()
         }
       }
       fixed_unit_shifts = best_delta;
+      fixed_shifts = torch::matmul(fixed_unit_shifts, cell);
     }
-    torch::Tensor fixed_shifts = torch::matmul(fixed_unit_shifts, cell);
+    torch::Tensor edge_T = edge_index.t();
+    torch::Tensor fixed_edge_T = fixed_edge_index.t();
+    std::vector<torch::Tensor> unique_edges_vec;
+    for (int i = 0; i < edge_T.size(0); i++) {
+      torch::Tensor current_edge = edge_T[i];
+      auto match = (current_edge == fixed_edge_T).all(1);
+      bool is_unique = !match.any().item<bool>();
+      if (is_unique) {
+        unique_edges_vec.push_back(current_edge);
+      }
+    }
+    torch::Tensor unique_edges;
+  if (!unique_edges_vec.empty()) {
+      unique_edges = torch::stack(unique_edges_vec, 0);
+  } else {
+      unique_edges = torch::empty({0, 2}, edge_T.options());
+  }
+  torch::Tensor unique_edges_T = unique_edges.t();
+  auto expanded_edge = edge_index.unsqueeze(2);          // [2, n_edges, 1]
+  auto expanded_unique = unique_edges_T.unsqueeze(1); // [2, 1, n_unique]
+  auto comparison_mask = (expanded_edge == expanded_unique).all(0); // [n_edges, n_unique]
+  torch::Tensor unique_indices = torch::any(comparison_mask, 1).nonzero().squeeze();
+  torch::Tensor unique_shifts = shifts.index({unique_indices});
+  torch::Tensor unique_unit_shifts = unit_shifts.index({unique_indices});
+  torch::Tensor unique_edge_labels = edge_labels.index({unique_indices});
 
-    torch::Tensor edges_combined = edge_index.t();
-    std::tuple<torch::Tensor, torch::Tensor, torch::Tensor> unique_edges_tuple =
-    at::unique_dim(edges_combined, /*dim=*/0, /*sorted=*/true, /*return_inverse=*/true);
-    torch::Tensor unique_indices = std::get<1>(unique_edges_tuple);
-    torch::Tensor is_duplicate = unique_indices < n_edges;
-    torch::Tensor unique_edge_indices = torch::nonzero(is_duplicate).squeeze();
-    torch::Tensor filtered_edge_index = edge_index.index({torch::indexing::Slice(), unique_edge_indices});
-    torch::Tensor filtered_shifts = shifts.index({unique_edge_indices});
-    torch::Tensor filtered_unit_shifts = unit_shifts.index({unique_edge_indices});
-    torch::Tensor filtered_edge_labels = edge_labels.index({unique_edge_indices});
-    n_edges = filtered_edge_index.size(1) + n_fixed_edges;
-    edge_index = torch::cat({filtered_edge_index, fixed_edge_index}, 1);
-    shifts = torch::cat({filtered_shifts, fixed_shifts}, 0);
-    unit_shifts = torch::cat({filtered_unit_shifts, fixed_unit_shifts}, 0);
-    edge_labels = torch::cat({
-      filtered_edge_labels,
-        torch::ones({fixed_edge_index.size(1)}, torch::kInt64)
-    }, 0);
-    // std::cout << edge_index.size() << std::endl;
-  }  
+  edge_index = torch::cat({unique_edges_T, fixed_edge_index}, 1);
+  shifts = torch::cat({unique_shifts, fixed_shifts}, 0);
+  unit_shifts = torch::cat({unique_unit_shifts, fixed_unit_shifts}, 0);
+  edge_labels = torch::cat({
+    unique_edge_labels,
+    torch::ones({fixed_edge_index.size(1)}, torch::kInt64)
+  }, 0);
+  std::cout << unit_shifts <<std::endl;
+  n_edges = unique_edges.size(1) + fixed_edge_index.size(1);
+}  
 
   edge_index = edge_index.to(device);
   edge_labels = edge_labels.to(device);
