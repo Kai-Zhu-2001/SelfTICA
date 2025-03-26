@@ -1066,7 +1066,6 @@ void PytorchGNN::calculate()
     unique_edge_labels,
     torch::ones({fixed_edge_index.size(1)}, torch::kInt64)
   }, 0);
-  std::cout << unit_shifts <<std::endl;
   n_edges = unique_edges.size(1) + fixed_edge_index.size(1);
 }  
 
