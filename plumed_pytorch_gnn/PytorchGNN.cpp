@@ -979,16 +979,16 @@ void PytorchGNN::calculate()
     int n_fixed_edges = pairs_size * 2;
     std::vector<std::vector<int64_t>> fixed_edge_index_vector;
     fixed_edge_index_vector.resize(2, std::vector<int64_t>(n_fixed_edges));
-    // #pragma omp parallel for num_threads(n_threads)
     int idx = 0;
-    for (int i = 0; i <  groupa_size; i++) {
-      for (int j = 0; j < groupb_size; j++) {
-      fixed_edge_index_vector[0][idx] = i;
-      fixed_edge_index_vector[1][idx] = j + groupa_size;
-      fixed_edge_index_vector[0][pairs_size + idx] = j + groupa_size;
-      fixed_edge_index_vector[1][pairs_size + idx] = i;
-      idx++;
-      }
+    #pragma omp parallel for num_threads(n_threads) collapse(2)
+    for (int i = 0; i < groupa_size; i++) {
+        for (int j = 0; j < groupb_size; j++) {
+            int idx = i * groupb_size + j;
+            fixed_edge_index_vector[0][idx] = i;
+            fixed_edge_index_vector[1][idx] = j + groupa_size;
+            fixed_edge_index_vector[0][n_fixed_edges/2 + idx] = j + groupa_size;
+            fixed_edge_index_vector[1][n_fixed_edges/2 + idx] = i;
+        }
     }
     torch::Tensor senders = torch::tensor(fixed_edge_index_vector[0], torch::TensorOptions().dtype(torch::kInt64));
     torch::Tensor receivers = torch::tensor(fixed_edge_index_vector[1], torch::TensorOptions().dtype(torch::kInt64));
@@ -998,75 +998,82 @@ void PytorchGNN::calculate()
     torch::Tensor indices_i = fixed_edge_index.index({0, torch::indexing::Slice()});
     torch::Tensor indices_j = fixed_edge_index.index({1, torch::indexing::Slice()});
     if (pbc) {
-      torch::Tensor cell_inv;
       torch::Tensor pos1 = positions.index({indices_i});
       torch::Tensor pos2 = positions.index({indices_j});
       torch::Tensor dist = pos2 - pos1;
       torch::Tensor best_delta = torch::zeros({n_fixed_edges, 3}, positions.options());
       torch::Tensor min_dist = torch::full({n_fixed_edges}, INFINITY, positions.options());
-      // #pragma omp parallel num_threads(n_threads)
+      auto min_dist_acc = min_dist.accessor<float, 1>();
+      auto best_delta_acc = best_delta.accessor<float, 2>();
+      auto dist_acc = dist.accessor<float, 2>();
+      auto cell_acc = cell.accessor<float, 2>();
+      #pragma omp parallel num_threads(n_threads)
       {
-        torch::Tensor local_min_dist = min_dist.clone();
-        torch::Tensor local_best_delta = best_delta.clone();
-        // #pragma omp for nowait
-        for (int dx = -1; dx <= 1; ++dx) {
-          for (int dy = -1; dy <= 1; ++dy) {
-            for (int dz = -1; dz <= 1; ++dz) {
-              torch::Tensor delta = torch::tensor({dx, dy, dz}, positions.options());
-              torch::Tensor shifted_delta;
-              shifted_delta = dist + torch::matmul(delta, cell);
-              shifted_delta = dist + torch::matmul(delta, cell);
-              torch::Tensor dist_norm = torch::norm(shifted_delta, 2, 1);
-              torch::Tensor mask = dist_norm < local_min_dist;
-              local_min_dist.index_put_({mask}, dist_norm.index({mask}));
-              local_best_delta.index_put_({mask}, delta.expand({n_fixed_edges, 3}).index({mask}));
-            }
+          std::vector<float> local_min_dist(n_fixed_edges, INFINITY);
+          std::vector<std::array<float, 3>> local_best_delta(n_fixed_edges);
+          float cell_vectors[3][3];
+          for (int i = 0; i < 3; ++i) {
+              for (int j = 0; j < 3; ++j) {
+                  cell_vectors[i][j] = cell_acc[i][j];
+              }
           }
-        }
-        // #pragma omp critical
-        {
-          torch::Tensor final_mask = local_min_dist < min_dist;
-          min_dist.index_put_({final_mask}, local_min_dist.index({final_mask}));
-          best_delta.index_put_({final_mask}, local_best_delta.index({final_mask}));
-        }
+          #pragma omp for collapse(3) nowait
+          for (int dx = -1; dx <= 1; ++dx) {
+              for (int dy = -1; dy <= 1; ++dy) {
+                  for (int dz = -1; dz <= 1; ++dz) {
+                      const float delta[3] = {
+                          static_cast<float>(dx),
+                          static_cast<float>(dy),
+                          static_cast<float>(dz)
+                      };
+                      const float shifted[3] = {
+                          delta[0] * cell_vectors[0][0] + delta[1] * cell_vectors[1][0] + delta[2] * cell_vectors[2][0],
+                          delta[0] * cell_vectors[0][1] + delta[1] * cell_vectors[1][1] + delta[2] * cell_vectors[2][1],
+                          delta[0] * cell_vectors[0][2] + delta[1] * cell_vectors[1][2] + delta[2] * cell_vectors[2][2]
+                      };
+                      for (int64_t i = 0; i < n_fixed_edges; ++i) {
+                          const float dx_shifted = dist_acc[i][0] + shifted[0];
+                          const float dy_shifted = dist_acc[i][1] + shifted[1];
+                          const float dz_shifted = dist_acc[i][2] + shifted[2];
+                          const float dist_sq = dx_shifted * dx_shifted + 
+                                                dy_shifted * dy_shifted + 
+                                                dz_shifted * dz_shifted;
+                            if (dist_sq < local_min_dist[i]) {
+                              local_min_dist[i] = dist_sq;
+                              local_best_delta[i] = {delta[0], delta[1], delta[2]};
+                          }
+                      }
+                  }
+              }
+          }
+          #pragma omp critical
+          {
+              for (int64_t i = 0; i < n_fixed_edges; ++i) {
+                  if (local_min_dist[i] < min_dist_acc[i]) {
+                      min_dist_acc[i] = local_min_dist[i];
+                      best_delta_acc[i][0] = local_best_delta[i][0];
+                      best_delta_acc[i][1] = local_best_delta[i][1];
+                      best_delta_acc[i][2] = local_best_delta[i][2];
+                  }
+              }
+          }
+      }
+      #pragma omp parallel for num_threads(n_threads)
+      for (int64_t i = 0; i < n_fixed_edges; ++i) {
+          min_dist_acc[i] = std::sqrt(min_dist_acc[i]);
       }
       fixed_unit_shifts = best_delta;
       fixed_shifts = torch::matmul(fixed_unit_shifts, cell);
-    }
-    torch::Tensor edge_T = edge_index.t();
-    torch::Tensor fixed_edge_T = fixed_edge_index.t();
-    std::vector<torch::Tensor> unique_edges_vec;
-    for (int i = 0; i < edge_T.size(0); i++) {
-      torch::Tensor current_edge = edge_T[i];
-      auto match = (current_edge == fixed_edge_T).all(1);
-      bool is_unique = !match.any().item<bool>();
-      if (is_unique) {
-        unique_edges_vec.push_back(current_edge);
-      }
-    }
-    torch::Tensor unique_edges;
-  if (!unique_edges_vec.empty()) {
-      unique_edges = torch::stack(unique_edges_vec, 0);
-  } else {
-      unique_edges = torch::empty({0, 2}, edge_T.options());
   }
-  torch::Tensor unique_edges_T = unique_edges.t();
-  auto expanded_edge = edge_index.unsqueeze(2);          // [2, n_edges, 1]
-  auto expanded_unique = unique_edges_T.unsqueeze(1); // [2, 1, n_unique]
-  auto comparison_mask = (expanded_edge == expanded_unique).all(0); // [n_edges, n_unique]
-  torch::Tensor unique_indices = torch::any(comparison_mask, 1).nonzero().squeeze();
-  torch::Tensor unique_shifts = shifts.index({unique_indices});
-  torch::Tensor unique_unit_shifts = unit_shifts.index({unique_indices});
-  torch::Tensor unique_edge_labels = edge_labels.index({unique_indices});
-
-  edge_index = torch::cat({unique_edges_T, fixed_edge_index}, 1);
-  shifts = torch::cat({unique_shifts, fixed_shifts}, 0);
-  unit_shifts = torch::cat({unique_unit_shifts, fixed_unit_shifts}, 0);
+  
+  edge_index = torch::cat({edge_index, fixed_edge_index}, 1);
+  shifts = torch::cat({shifts, fixed_shifts}, 0);
+  unit_shifts = torch::cat({unit_shifts, fixed_unit_shifts}, 0);
   edge_labels = torch::cat({
-    unique_edge_labels,
+    edge_labels,
     torch::ones({fixed_edge_index.size(1)}, torch::kInt64)
   }, 0);
-  n_edges = unique_edges.size(1) + fixed_edge_index.size(1);
+  n_edges = edge_index.size(1);
 }  
 
   edge_index = edge_index.to(device);
