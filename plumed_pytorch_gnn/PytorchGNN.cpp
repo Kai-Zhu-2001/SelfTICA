@@ -77,14 +77,14 @@ ATOM      5  C   ACE A   1      15.300  15.070  29.100  1.00  0.00           C
 
 The module constructs graph edges between neighbors inside the selected atom
 group, using the cutoff value recorded in the model file. By default, such an
-atom group is defined by the single GROUP_SYSTEM keyword. Under this case, the node
+atom group is defined by the single GROUPA keyword. Under this case, the node
 number of the input graph in each MD step is fixed, and the number of edges
 will change according to the relative postions of the atoms.
-However, if the GROUP_ENVIRONMENT parameter is given, the atom group mentioned above will
-contain all atoms in GROUP_SYSTEM, _AND_ atoms in GROUP_ENVIRONMENT which are within a radius of
-_ANY_ atom in GROUP_SYSTEM. Such a radius of selecting atoms from GROUP_ENVIRONMENT equals to the
+However, if the GROUPB parameter is given, the atom group mentioned above will
+contain all atoms in GROUPA, _AND_ atoms in GROUPB which are within a radius of
+_ANY_ atom in GROUPA. Such a radius of selecting atoms from GROUPB equals to the
 cutoff radius recorded in the model file _plus_ the buffer size controlled by
-the BUFFER keyword. Thus, when GROUP_ENVIRONMENT is given, the node number of the input
+the BUFFER keyword. Thus, when GROUPB is given, the node number of the input
 graph could fluctuate in different MD steps.
 
 This module also support committor calculations. When the input PyTorch model
@@ -103,7 +103,7 @@ LibTorch, when dealing with large input graphs.
 The following example instructs plumed to evaluate the GNN model using the atoms 1-10. The neighbor list for determining the edges will be updated every 100 steps.
 \plumedfile
 PYTORCH_GNN ...
-  GROUP_SYSTEM=1-10
+  GROUPA=1-10
   MODEL=model.ptc
   STRUCTURE=plumed_topo.pdb
   NL_STRIDE=100
@@ -114,7 +114,7 @@ PYTORCH_GNN ...
 The following example instructs plumed to do the same calculation as the above example, but will evaluate the model on CUDA using double precision, and add an OPES bias potential on the CV.
 \plumedfile
 PYTORCH_GNN ...
-  GROUP_SYSTEM=1-10
+  GROUPA=1-10
   MODEL=model.ptc
   STRUCTURE=plumed_topo.pdb
   NL_STRIDE=100
@@ -136,7 +136,7 @@ OPES_METAD ...
 The following example instructs plumed to do the same calculation as the above example, but will sample Kang's (or Kolmogolov's) transition state ensemble.
 \plumedfile
 PYTORCH_GNN ...
-  GROUP_SYSTEM=1-10
+  GROUPA=1-10
   MODEL=model.ptc
   STRUCTURE=plumed_topo.pdb
   NL_STRIDE=100
@@ -152,8 +152,8 @@ BIASVALUE ARG=gnn.kbias LABEL=vk
 The following example instructs plumed to evaluate the GNN model using the atoms 1-10 as center atoms, and atoms 11-100 as the environment atoms. The buffer size used for selecting active atoms from the environment atoms is 2 PLUMED unit. The neighbor list for determining the edges will be updated every 2 steps.
 \plumedfile
 PYTORCH_GNN ...
-  GROUP_SYSTEM=1-10
-  GROUP_ENVIRONMENT=11-100
+  GROUPA=1-10
+  GROUPB=11-100
   MODEL=model.ptc
   STRUCTURE=plumed_topo.pdb
   NL_STRIDE=2
@@ -186,8 +186,8 @@ class PytorchGNN: public Colvar
   std::vector<int> model_atomic_numbers;
   std::vector<AtomNumber> atom_list_system;
   std::vector<AtomNumber> atom_list_environment;
-  std::vector<AtomNumber> atom_list_groupa;
-  std::vector<AtomNumber> atom_list_groupb;
+  std::vector<AtomNumber> atom_list_subgroupa;
+  std::vector<AtomNumber> atom_list_subgroupb;
   std::vector<int> atom_list_active; // local_ids
   std::unique_ptr<NeighborList> neighbor_list;
   torch::jit::script::Module model;
@@ -228,25 +228,25 @@ void PytorchGNN::registerKeywords(Keywords& keys)
 
   keys.add(
     "atoms",
-    "GROUP_SYSTEM",
+    "GROUPA",
     "List of atoms in the system group (corresponding to the `system_selection in mlcolvar`)"
   );
 
   keys.add(
     "atoms",
-    "GROUP_ENVIRONMENT",
+    "GROUPB",
     "List of atoms in the environment group (corresponding to the `environment_selection in mlcolvar`)"
   );
 
   keys.add(
     "atoms",
-    "GROUP_A",
+    "SUBGROUPA",
     "List of atoms in the fixed-edge atom group A (corresponding to the `group1_selection in mlcovlar)"
   );
 
   keys.add(
     "atoms",
-    "GROUP_B",
+    "SUBGROUPB",
     "List of atoms in the fixed-edge atom group B (corresponding to the `group2_selection in mlcovlar)"
   );
 
@@ -337,10 +337,10 @@ PytorchGNN::PytorchGNN(const ActionOptions& ao):
   log.printf(version_info.data());
 
   // parse input
-  parseAtomList("GROUP_SYSTEM", atom_list_system);
-  parseAtomList("GROUP_ENVIRONMENT", atom_list_environment);
-  parseAtomList("GROUP_A", atom_list_groupa);
-  parseAtomList("GROUP_B", atom_list_groupb);
+  parseAtomList("GROUPA", atom_list_system);
+  parseAtomList("GROUPB", atom_list_environment);
+  parseAtomList("SUBGROUPA", atom_list_subgroupa);
+  parseAtomList("SUBGROUPB", atom_list_subgroupb);
 
   parse("MODEL", model_file_name);
 
@@ -353,7 +353,7 @@ PytorchGNN::PytorchGNN(const ActionOptions& ao):
 
   parse("BUFFER", buffer);
   if (buffer > 0 && atom_list_environment.size() == 0)
-    plumed_merror("Not GROUP_ENVIRONMENT given! Cannot define the BUFFER key!");
+    plumed_merror("Not GROUPB given! Cannot define the BUFFER key!");
 
   parse("KBLAMBDA", kb_lambda);
   parse("KBEPSILON", kb_epsilon);
@@ -386,7 +386,7 @@ PytorchGNN::PytorchGNN(const ActionOptions& ao):
   // check groups
   if (atom_list_environment.size() > 0) {
     if (groups_have_intersection())
-      plumed_merror("GROUP_SYSTEM can not intersect with GROUP_ENVIRONMENT!");
+      plumed_merror("GROUPA can not intersect with GROUPB!");
     atom_list_active.resize(atom_list_system.size() + atom_list_environment.size());
     atom_list_active.clear();
   } else {
@@ -394,16 +394,16 @@ PytorchGNN::PytorchGNN(const ActionOptions& ao):
     atom_list_active.clear();
     find_active_atoms(1);
   }
-  if ((atom_list_groupa.size() > 0) != (atom_list_groupb.size() > 0)) {
-    plumed_merror("GROUP_A and GROUP_B must either both be specified or be both absent!");
+  if ((atom_list_subgroupa.size() > 0) != (atom_list_subgroupb.size() > 0)) {
+    plumed_merror("SUBGROUPA and SUBGROUPB must either both be specified or be both absent!");
   }
-  for (PLMD::AtomNumber atom : atom_list_groupa) {
+  for (PLMD::AtomNumber atom : atom_list_subgroupa) {
     if (std::find(atom_list_system.begin(), atom_list_system.end(), atom) == atom_list_system.end())
-      plumed_merror("All atoms in GROUP_A must be in GROUP_SYSTEM!");
+      plumed_merror("All atoms in SUBGROUPA must be in GROUPA!");
   }
-  for (PLMD::AtomNumber atom : atom_list_groupb) {
+  for (PLMD::AtomNumber atom : atom_list_subgroupb) {
     if (std::find(atom_list_system.begin(), atom_list_system.end(), atom) == atom_list_system.end())
-      plumed_merror("All atoms in GROUP_B must be in GROUP_SYSTEM!");
+      plumed_merror("All atoms in SUBGROUPB must be in GROUPA!");
   }
 
   // check precise
@@ -635,30 +635,30 @@ PytorchGNN::PytorchGNN(const ActionOptions& ao):
       log.printf("  %d", atom_list_system[i].serial());
     }
     log.printf("\n");
-    log.printf("  Environment atom list (GROUP_ENVIRONMENT):\n");
+    log.printf("  Environment atom list (GROUPB):\n");
     for (unsigned int i = 0; i < atom_list_environment.size(); i++) {
       if (((i + 1) % 10) == 0)
         log.printf("\n");
       log.printf("  %d", atom_list_environment[i].serial());
     }
     log.printf("\n");
-    if(atom_list_groupa.size() > 0) {
+    if(atom_list_subgroupa.size() > 0) {
       log.printf("Will build fixed edges using %u GROUPA atoms and %u GROUPB atoms:\n",
-      static_cast<unsigned>(atom_list_groupa.size()),
-      static_cast<unsigned>(atom_list_groupb.size())
+      static_cast<unsigned>(atom_list_subgroupa.size()),
+      static_cast<unsigned>(atom_list_subgroupb.size())
       );
       log.printf("  GROUPA atom list:\n");
-      for (unsigned int i = 0; i < atom_list_groupa.size(); i++) {
+      for (unsigned int i = 0; i < atom_list_subgroupa.size(); i++) {
         if (((i + 1) % 10) == 0)
           log.printf("\n");
-        log.printf("  %d", atom_list_groupa[i].serial());
+        log.printf("  %d", atom_list_subgroupa[i].serial());
       }
       log.printf("\n");
       log.printf("  GROUPB atom list:\n");
-      for (unsigned int i = 0; i < atom_list_groupb.size(); i++) {
+      for (unsigned int i = 0; i < atom_list_subgroupb.size(); i++) {
         if (((i + 1) % 10) == 0)
           log.printf("\n");
-        log.printf("  %d", atom_list_groupb[i].serial());
+        log.printf("  %d", atom_list_subgroupb[i].serial());
       }
     }
     log.printf("\n");
@@ -674,30 +674,30 @@ PytorchGNN::PytorchGNN(const ActionOptions& ao):
       log.printf("  %d", atom_list_system[i].serial());
     }
     log.printf("\n");
-    log.printf("  Environment atom list (GROUP_ENVIRONMENT):\n");
+    log.printf("  Environment atom list (GROUPB):\n");
     for (unsigned int i = 0; i < atom_list_environment.size(); i++) {
       if (((i + 1) % 10) == 0)
         log.printf("\n");
       log.printf("  %d", atom_list_environment[i].serial());
     }
     log.printf("\n");
-    if(atom_list_groupa.size() > 0) {
+    if(atom_list_subgroupa.size() > 0) {
       log.printf("Will build fixed edges using %u GROUPA atoms and %u GROUPB atoms:\n",
-      static_cast<unsigned>(atom_list_groupa.size()),
-      static_cast<unsigned>(atom_list_groupb.size())
+      static_cast<unsigned>(atom_list_subgroupa.size()),
+      static_cast<unsigned>(atom_list_subgroupb.size())
       );
       log.printf("  GROUPA atom list:\n");
-      for (unsigned int i = 0; i < atom_list_groupa.size(); i++) {
+      for (unsigned int i = 0; i < atom_list_subgroupa.size(); i++) {
         if (((i + 1) % 10) == 0)
           log.printf("\n");
-        log.printf("  %d", atom_list_groupa[i].serial());
+        log.printf("  %d", atom_list_subgroupa[i].serial());
       }
       log.printf("\n");
       log.printf("  GROUPB atom list:\n");
-      for (unsigned int i = 0; i < atom_list_groupb.size(); i++) {
+      for (unsigned int i = 0; i < atom_list_subgroupb.size(); i++) {
         if (((i + 1) % 10) == 0)
           log.printf("\n");
-        log.printf("  %d", atom_list_groupb[i].serial());
+        log.printf("  %d", atom_list_subgroupb[i].serial());
       }
     }
     log.printf("\n");
@@ -941,6 +941,35 @@ void PytorchGNN::calculate()
     );
   }
 
+  if (atom_list_subgroupa.size() > 0) {
+    int groupa_size = atom_list_subgroupa.size();
+    int groupb_size = atom_list_subgroupb.size();
+    int pairs_size = atom_list_subgroupa.size() * atom_list_subgroupb.size();
+    int n_fixed_edges = pairs_size * 2;
+    std::vector<std::vector<int64_t>> fixed_edge_index_vector;
+    fixed_edge_index_vector.resize(2, std::vector<int64_t>(n_fixed_edges));
+    int idx = 0;
+    #pragma omp parallel for num_threads(n_threads) collapse(2)
+    for (int i = 0; i < groupa_size; i++) {
+        for (int j = 0; j < groupb_size; j++) {
+            int idx = i * groupb_size + j;
+            fixed_edge_index_vector[0][idx] = i;
+            fixed_edge_index_vector[1][idx] = j + groupa_size;
+            fixed_edge_index_vector[0][n_fixed_edges/2 + idx] = j + groupa_size;
+            fixed_edge_index_vector[1][n_fixed_edges/2 + idx] = i;
+        }
+    }
+    torch::Tensor senders = torch::tensor(fixed_edge_index_vector[0], torch::TensorOptions().dtype(torch::kInt64));
+    torch::Tensor receivers = torch::tensor(fixed_edge_index_vector[1], torch::TensorOptions().dtype(torch::kInt64));
+    torch::Tensor fixed_edge_index = torch::vstack({senders, receivers});  
+  edge_index = torch::cat({edge_index, fixed_edge_index}, 1);
+  edge_labels = torch::cat({
+    edge_labels,
+    torch::ones({fixed_edge_index.size(1)}, torch::kInt64)
+  }, 0);
+  n_edges = edge_index.size(1);
+}  
+
   // edge shifts
   torch::Tensor shifts;
   torch::Tensor unit_shifts;
@@ -972,110 +1001,6 @@ void PytorchGNN::calculate()
     unit_shifts = torch::zeros({n_edges, 3}, torch_float_dtype);
   }
   
-  if (atom_list_groupa.size() > 0) {
-    int groupa_size = atom_list_groupa.size();
-    int groupb_size = atom_list_groupb.size();
-    int pairs_size = atom_list_groupa.size() * atom_list_groupb.size();
-    int n_fixed_edges = pairs_size * 2;
-    std::vector<std::vector<int64_t>> fixed_edge_index_vector;
-    fixed_edge_index_vector.resize(2, std::vector<int64_t>(n_fixed_edges));
-    int idx = 0;
-    #pragma omp parallel for num_threads(n_threads) collapse(2)
-    for (int i = 0; i < groupa_size; i++) {
-        for (int j = 0; j < groupb_size; j++) {
-            int idx = i * groupb_size + j;
-            fixed_edge_index_vector[0][idx] = i;
-            fixed_edge_index_vector[1][idx] = j + groupa_size;
-            fixed_edge_index_vector[0][n_fixed_edges/2 + idx] = j + groupa_size;
-            fixed_edge_index_vector[1][n_fixed_edges/2 + idx] = i;
-        }
-    }
-    torch::Tensor senders = torch::tensor(fixed_edge_index_vector[0], torch::TensorOptions().dtype(torch::kInt64));
-    torch::Tensor receivers = torch::tensor(fixed_edge_index_vector[1], torch::TensorOptions().dtype(torch::kInt64));
-    torch::Tensor fixed_edge_index = torch::vstack({senders, receivers});
-    torch::Tensor fixed_unit_shifts = torch::zeros({n_fixed_edges, 3}, positions.options());
-    torch::Tensor fixed_shifts = torch::zeros({n_fixed_edges, 3}, positions.options());
-    torch::Tensor indices_i = fixed_edge_index.index({0, torch::indexing::Slice()});
-    torch::Tensor indices_j = fixed_edge_index.index({1, torch::indexing::Slice()});
-    if (pbc) {
-      torch::Tensor pos1 = positions.index({indices_i});
-      torch::Tensor pos2 = positions.index({indices_j});
-      torch::Tensor dist = pos2 - pos1;
-      torch::Tensor best_delta = torch::zeros({n_fixed_edges, 3}, positions.options());
-      torch::Tensor min_dist = torch::full({n_fixed_edges}, INFINITY, positions.options());
-      auto min_dist_acc = min_dist.accessor<float, 1>();
-      auto best_delta_acc = best_delta.accessor<float, 2>();
-      auto dist_acc = dist.accessor<float, 2>();
-      auto cell_acc = cell.accessor<float, 2>();
-      #pragma omp parallel num_threads(n_threads)
-      {
-          std::vector<float> local_min_dist(n_fixed_edges, INFINITY);
-          std::vector<std::array<float, 3>> local_best_delta(n_fixed_edges);
-          float cell_vectors[3][3];
-          for (int i = 0; i < 3; ++i) {
-              for (int j = 0; j < 3; ++j) {
-                  cell_vectors[i][j] = cell_acc[i][j];
-              }
-          }
-          #pragma omp for collapse(3) nowait
-          for (int dx = -1; dx <= 1; ++dx) {
-              for (int dy = -1; dy <= 1; ++dy) {
-                  for (int dz = -1; dz <= 1; ++dz) {
-                      const float delta[3] = {
-                          static_cast<float>(dx),
-                          static_cast<float>(dy),
-                          static_cast<float>(dz)
-                      };
-                      const float shifted[3] = {
-                          delta[0] * cell_vectors[0][0] + delta[1] * cell_vectors[1][0] + delta[2] * cell_vectors[2][0],
-                          delta[0] * cell_vectors[0][1] + delta[1] * cell_vectors[1][1] + delta[2] * cell_vectors[2][1],
-                          delta[0] * cell_vectors[0][2] + delta[1] * cell_vectors[1][2] + delta[2] * cell_vectors[2][2]
-                      };
-                      for (int64_t i = 0; i < n_fixed_edges; ++i) {
-                          const float dx_shifted = dist_acc[i][0] + shifted[0];
-                          const float dy_shifted = dist_acc[i][1] + shifted[1];
-                          const float dz_shifted = dist_acc[i][2] + shifted[2];
-                          const float dist_sq = dx_shifted * dx_shifted + 
-                                                dy_shifted * dy_shifted + 
-                                                dz_shifted * dz_shifted;
-                            if (dist_sq < local_min_dist[i]) {
-                              local_min_dist[i] = dist_sq;
-                              local_best_delta[i] = {delta[0], delta[1], delta[2]};
-                          }
-                      }
-                  }
-              }
-          }
-          #pragma omp critical
-          {
-              for (int64_t i = 0; i < n_fixed_edges; ++i) {
-                  if (local_min_dist[i] < min_dist_acc[i]) {
-                      min_dist_acc[i] = local_min_dist[i];
-                      best_delta_acc[i][0] = local_best_delta[i][0];
-                      best_delta_acc[i][1] = local_best_delta[i][1];
-                      best_delta_acc[i][2] = local_best_delta[i][2];
-                  }
-              }
-          }
-      }
-      #pragma omp parallel for num_threads(n_threads)
-      for (int64_t i = 0; i < n_fixed_edges; ++i) {
-          min_dist_acc[i] = std::sqrt(min_dist_acc[i]);
-      }
-      fixed_unit_shifts = best_delta;
-      fixed_shifts = torch::matmul(fixed_unit_shifts, cell);
-  }
-  
-  edge_index = torch::cat({edge_index, fixed_edge_index}, 1);
-  shifts = torch::cat({shifts, fixed_shifts}, 0);
-  unit_shifts = torch::cat({unit_shifts, fixed_unit_shifts}, 0);
-  edge_labels = torch::cat({
-    edge_labels,
-    torch::ones({fixed_edge_index.size(1)}, torch::kInt64)
-  }, 0);
-  n_edges = edge_index.size(1);
-}  
-
   edge_index = edge_index.to(device);
   edge_labels = edge_labels.to(device);
   shifts = shifts.to(device);
