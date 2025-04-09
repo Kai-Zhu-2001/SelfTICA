@@ -949,7 +949,8 @@ void PytorchGNN::calculate()
     std::vector<std::vector<int64_t>> fixed_edge_index_vector;
     fixed_edge_index_vector.resize(2, std::vector<int64_t>(n_fixed_edges));
     int idx = 0;
-    #pragma omp parallel for num_threads(n_threads) collapse(2)
+    // #pragma omp parallel for num_threads(n_threads) collapse(2)
+    #pragma omp parallel for num_threads(n_threads)
     for (int i = 0; i < groupa_size; i++) {
         for (int j = 0; j < groupb_size; j++) {
             int idx = i * groupb_size + j;
@@ -959,15 +960,29 @@ void PytorchGNN::calculate()
             fixed_edge_index_vector[1][n_fixed_edges/2 + idx] = i;
         }
     }
+    std::vector<float> distance_vector(n_fixed_edges);
+    #pragma omp parallel for num_threads(n_threads)
+    for (int i = 0; i < n_fixed_edges; i++) {
+      distance_vector[i] = pbc_tools.distance(
+        true,
+        x_local[atom_list_active[fixed_edge_index_vector[0][i]]],
+        x_local[atom_list_active[fixed_edge_index_vector[1][i]]]
+      );
+    }
+    torch::Tensor distance = torch::tensor(distance_vector, torch::TensorOptions().dtype(torch::kFloat32));
     torch::Tensor senders = torch::tensor(fixed_edge_index_vector[0], torch::TensorOptions().dtype(torch::kInt64));
     torch::Tensor receivers = torch::tensor(fixed_edge_index_vector[1], torch::TensorOptions().dtype(torch::kInt64));
+
+    const torch::Tensor mask = distance > r_max;
+    senders = senders.index({mask});
+    receivers = receivers.index({mask});
     torch::Tensor fixed_edge_index = torch::vstack({senders, receivers});  
-  edge_index = torch::cat({edge_index, fixed_edge_index}, 1);
-  edge_labels = torch::cat({
-    edge_labels,
-    torch::ones({fixed_edge_index.size(1)}, torch::kInt64)
-  }, 0);
-  n_edges = edge_index.size(1);
+    edge_index = torch::cat({edge_index, fixed_edge_index}, 1);
+    edge_labels = torch::cat({
+      edge_labels,
+      torch::ones({fixed_edge_index.size(1)}, torch::kInt64)
+    }, 0);
+    n_edges = edge_index.size(1);
 }  
 
   // edge shifts
