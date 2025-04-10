@@ -1335,23 +1335,6 @@ void PytorchGNN::find_active_atoms(int n_threads) {
   }
 }
 
-// std::vector<size_t> PytorchGNN::find_atom_indices(
-//   const std::vector<AtomNumber>& subgroup,
-//   int n_threads)
-// {
-//   std::unordered_map<unsigned, size_t> index_map;
-//   #pragma omp parallel for num_threads(n_threads)
-//   for (size_t i = 0; i < atom_list_system.size(); ++i) {
-//       index_map[atom_list_system[i].serial()] = i;
-//   }
-//   std::vector<size_t> indices(subgroup.size());
-//   #pragma omp parallel for num_threads(n_threads)
-//   for (size_t i = 0; i < subgroup.size(); ++i) {
-//       indices[i] = index_map.at(subgroup[i].serial());
-//   }
-//   return indices;
-// }
-
 std::vector<size_t> PytorchGNN::find_atom_indices(
   const std::vector<AtomNumber>& subgroup,
   int n_threads)
