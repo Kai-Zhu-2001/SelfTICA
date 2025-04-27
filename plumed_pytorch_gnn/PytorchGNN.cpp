@@ -162,6 +162,35 @@ PYTORCH_GNN ...
 ... PYTORCH_GNN
 \endplumedfile
 
+The following example instructs plumed to evaluate the GNN model using the atoms 1-10 as center atoms, atoms 11-100 as the environment atoms, and atoms 1-5 as subgroup atoms. The buffer size used for selecting active atoms from the environment atoms is 2 PLUMED unit. The neighbor list for determining the edges will be updated every 2 steps.
+\plumedfile
+PYTORCH_GNN ...
+  GROUPA=1-10
+  GROUPB=11-100
+  SUBGROUPA=1-5
+  MODEL=model.ptc
+  STRUCTURE=plumed_topo.pdb
+  NL_STRIDE=2
+  BUFFER=2.0
+  LABEL=gnn
+... PYTORCH_GNN
+\endplumedfile
+
+The following example instructs plumed to evaluate the GNN model using the atoms 1-10 as center atoms, atoms 11-100 as the environment atoms, atoms 1-5 as subgroupA atoms, and atoms 6-10 as subgroupB atoms. The buffer size used for selecting active atoms from the environment atoms is 2 PLUMED unit. The neighbor list for determining the edges will be updated every 2 steps.
+\plumedfile
+PYTORCH_GNN ...
+  GROUPA=1-10
+  GROUPB=11-100
+  SUBGROUPA=1-5
+  SUBGROUPA=6-10
+  MODEL=model.ptc
+  STRUCTURE=plumed_topo.pdb
+  NL_STRIDE=2
+  BUFFER=2.0
+  LABEL=gnn
+... PYTORCH_GNN
+\endplumedfile
+
 */
 //+ENDPLUMEDOC
 
@@ -176,6 +205,7 @@ class PytorchGNN: public Colvar
   bool is_committor = false;
   bool k_bias = false;
   double r_max = 0.0; // In PLUMED length unit
+  double long_r_max = 0.0; // In PLUMED length unit
   double buffer = 0.0; // In PLUMED length unit
   double kb_lambda = 1.0;
   double kb_epsilon = -1;
@@ -491,6 +521,10 @@ PytorchGNN::PytorchGNN(const ActionOptions& ao):
   else
     r_max = model.attr("r_max").toTensor().item<double>();
   r_max = r_max / atoms.getUnits().getLength() * 0.1; // TODO: remove the `atoms.` prefix when release
+
+  if (model.hasattr("long_cutoff"))
+    long_r_max = model.attr("long_cutoff").toTensor().item<double>();
+  long_r_max = long_r_max / atoms.getUnits().getLength() * 0.1; // TODO: remove the `atoms.` preifx when release
 
   // get atomic numbers
   if (!model.hasattr("atomic_numbers"))
@@ -982,16 +1016,41 @@ void PytorchGNN::calculate()
     torch::Tensor senders = torch::tensor(fixed_edge_index_vector[0], torch::TensorOptions().dtype(torch::kInt64));
     torch::Tensor receivers = torch::tensor(fixed_edge_index_vector[1], torch::TensorOptions().dtype(torch::kInt64));
 
-    const torch::Tensor mask = distance > r_max;
+    const torch::Tensor mask = distance <= long_r_max;
     senders = senders.index({mask});
     receivers = receivers.index({mask});
     torch::Tensor fixed_edge_index = torch::vstack({senders, receivers});  
-    edge_index = torch::cat({edge_index, fixed_edge_index}, 1);
-    edge_labels = torch::cat({
-      edge_labels,
-      torch::ones({fixed_edge_index.size(1)}, torch::kInt64)
-    }, 0);
-    n_edges = edge_index.size(1);
+
+  torch::Tensor short_edges_all = torch::vstack({edge_index[0], edge_index[1]});
+  torch::Tensor long_edges_all = torch::vstack({fixed_edge_index[0], fixed_edge_index[1]});
+  std::unordered_set<std::string> long_edge_set;
+  const auto long_edges_a = long_edges_all.accessor<int64_t, 2>();
+  for (int64_t j = 0; j < long_edges_all.size(1); j++) {
+      long_edge_set.insert(
+          std::to_string(long_edges_a[0][j]) + "," +
+          std::to_string(long_edges_a[1][j])
+      );
+  }
+  torch::Tensor keep_mask = torch::ones({short_edges_all.size(1)}, torch::kBool);
+  const auto short_edges_a = short_edges_all.accessor<int64_t, 2>();
+  #pragma omp parallel for num_threads(n_threads)
+  for (int64_t i = 0; i < short_edges_all.size(1); i++) {
+    std::string key = std::to_string(short_edges_a[0][i]) + "," +
+                     std::to_string(short_edges_a[1][i]);
+    
+    if (long_edge_set.find(key) != long_edge_set.end()) {
+        keep_mask[i] = false;
+    }
+  }
+  torch::Tensor filtered_edge_index = short_edges_all.index({torch::indexing::Slice(), keep_mask});
+  torch::Tensor filtered_edge_labels = edge_labels.index({keep_mask});
+
+  edge_index = torch::cat({filtered_edge_index, fixed_edge_index}, 1);
+  edge_labels = torch::cat({
+    filtered_edge_labels,
+    torch::ones({fixed_edge_index.size(1)}, torch::kInt64)
+  }, 0);
+  n_edges = edge_index.size(1);
 } else{
   int groupa_size = atom_list_subgroupa.size();
   int n_fixed_edges = groupa_size * (groupa_size - 1);
@@ -1022,13 +1081,38 @@ void PytorchGNN::calculate()
   torch::Tensor senders = torch::tensor(fixed_edge_index_vector[0], torch::TensorOptions().dtype(torch::kInt64));
   torch::Tensor receivers = torch::tensor(fixed_edge_index_vector[1], torch::TensorOptions().dtype(torch::kInt64));
 
-  const torch::Tensor mask = distance > r_max;
+  const torch::Tensor mask = distance <= long_r_max;
   senders = senders.index({mask});
   receivers = receivers.index({mask});
   torch::Tensor fixed_edge_index = torch::vstack({senders, receivers}); 
-  edge_index = torch::cat({edge_index, fixed_edge_index}, 1);
+
+  torch::Tensor short_edges_all = torch::vstack({edge_index[0], edge_index[1]});
+  torch::Tensor long_edges_all = torch::vstack({fixed_edge_index[0], fixed_edge_index[1]});
+  std::unordered_set<std::string> long_edge_set;
+  const auto long_edges_a = long_edges_all.accessor<int64_t, 2>();
+  for (int64_t j = 0; j < long_edges_all.size(1); j++) {
+      long_edge_set.insert(
+          std::to_string(long_edges_a[0][j]) + "," +
+          std::to_string(long_edges_a[1][j])
+      );
+  }
+  torch::Tensor keep_mask = torch::ones({short_edges_all.size(1)}, torch::kBool);
+  const auto short_edges_a = short_edges_all.accessor<int64_t, 2>();
+  #pragma omp parallel for num_threads(n_threads)
+  for (int64_t i = 0; i < short_edges_all.size(1); i++) {
+    std::string key = std::to_string(short_edges_a[0][i]) + "," +
+                     std::to_string(short_edges_a[1][i]);
+    
+    if (long_edge_set.find(key) != long_edge_set.end()) {
+        keep_mask[i] = false;
+    }
+  }
+  torch::Tensor filtered_edge_index = short_edges_all.index({torch::indexing::Slice(), keep_mask});
+  torch::Tensor filtered_edge_labels = edge_labels.index({keep_mask});
+
+  edge_index = torch::cat({filtered_edge_index, fixed_edge_index}, 1);
   edge_labels = torch::cat({
-    edge_labels,
+    filtered_edge_labels,
     torch::ones({fixed_edge_index.size(1)}, torch::kInt64)
   }, 0);
   n_edges = edge_index.size(1);
