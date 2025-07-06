@@ -33,8 +33,6 @@ along with plumed.  If not, see <http://www.gnu.org/licenses/>.
 #include "tools/File.h"
 #include "tools/PDB.h"
 
-#include <unordered_map>
-
 // NOTE: Freezing a ScriptModule (torch::jit::freeze) works only in >=1.11
 // For 1.8 <= versions <=1.10 we need a hack
 // (see https://discuss.pytorch.org/t/how-to-check-libtorch-version/77709/4 and also
@@ -85,7 +83,9 @@ contain all atoms in GROUPA, _AND_ atoms in GROUPB which are within a radius of
 _ANY_ atom in GROUPA. Such a radius of selecting atoms from GROUPB equals to the
 cutoff radius recorded in the model file _plus_ the buffer size controlled by
 the BUFFER keyword. Thus, when GROUPB is given, the node number of the input
-graph could fluctuate in different MD steps.
+graph could fluctuate in different MD steps. Besides, when SUBGROUPA is defined
+the module will add long edges bewteen such a group. Cutoff radius of these
+long edges will equal to the cutoff_l attribute recorded in the model file.
 
 This module also support committor calculations. When the input PyTorch model
 is a committor model, the outputs will assign the zeta value to the first
@@ -162,35 +162,6 @@ PYTORCH_GNN ...
 ... PYTORCH_GNN
 \endplumedfile
 
-The following example instructs plumed to evaluate the GNN model using the atoms 1-10 as center atoms, atoms 11-100 as the environment atoms, and atoms 1-5 as subgroup atoms. The buffer size used for selecting active atoms from the environment atoms is 2 PLUMED unit. The neighbor list for determining the edges will be updated every 2 steps.
-\plumedfile
-PYTORCH_GNN ...
-  GROUPA=1-10
-  GROUPB=11-100
-  SUBGROUPA=1-5
-  MODEL=model.ptc
-  STRUCTURE=plumed_topo.pdb
-  NL_STRIDE=2
-  BUFFER=2.0
-  LABEL=gnn
-... PYTORCH_GNN
-\endplumedfile
-
-The following example instructs plumed to evaluate the GNN model using the atoms 1-10 as center atoms, atoms 11-100 as the environment atoms, atoms 1-5 as subgroupA atoms, and atoms 6-10 as subgroupB atoms. The buffer size used for selecting active atoms from the environment atoms is 2 PLUMED unit. The neighbor list for determining the edges will be updated every 2 steps.
-\plumedfile
-PYTORCH_GNN ...
-  GROUPA=1-10
-  GROUPB=11-100
-  SUBGROUPA=1-5
-  SUBGROUPA=6-10
-  MODEL=model.ptc
-  STRUCTURE=plumed_topo.pdb
-  NL_STRIDE=2
-  BUFFER=2.0
-  LABEL=gnn
-... PYTORCH_GNN
-\endplumedfile
-
 */
 //+ENDPLUMEDOC
 
@@ -205,20 +176,20 @@ class PytorchGNN: public Colvar
   bool is_committor = false;
   bool k_bias = false;
   double r_max = 0.0; // In PLUMED length unit
-  double long_r_max = 0.0; // In PLUMED length unit
   double buffer = 0.0; // In PLUMED length unit
-  double kb_lambda = 1.0;
-  double kb_epsilon = -1;
-  double kb_sigmoid_p= -1;
+  double r_max_l = -1.0; // In PLUMED length unit
+  double kb_lambda = -1.0;
+  double kb_epsilon = -1.0;
+  double kb_sigmoid_p = -1.0;
   std::string model_file_name;
   std::string structure_file_name;
   std::vector<int> system_node_types;
   std::vector<int> model_atomic_numbers;
-  std::vector<AtomNumber> atom_list_system;
-  std::vector<AtomNumber> atom_list_environment;
-  std::vector<AtomNumber> atom_list_subgroupa;
-  std::vector<AtomNumber> atom_list_subgroupb;
+  std::vector<AtomNumber> atom_list_a;
+  std::vector<AtomNumber> atom_list_b;
+  std::vector<AtomNumber> atom_list_sub_a;
   std::vector<int> atom_list_active; // local_ids
+  std::vector<int> atom_list_active_subgroup; // local_ids
   std::unique_ptr<NeighborList> neighbor_list;
   torch::jit::script::Module model;
   torch::ScalarType torch_float_dtype = torch::kFloat32;
@@ -239,10 +210,9 @@ class PytorchGNN: public Colvar
   );
   int atomic_number_from_name(std::string name);
   bool groups_have_intersection(void);
+  bool subgroup_is_in_group_a(void);
   void find_active_atoms(int n_threads);
-  std::vector<size_t> find_atom_indices(
-    const std::vector<AtomNumber>& subgroup,
-    int n_threads);
+  void find_active_subgroup_atoms(void);
 
 public:
   explicit PytorchGNN(const ActionOptions&);
@@ -261,25 +231,19 @@ void PytorchGNN::registerKeywords(Keywords& keys)
   keys.add(
     "atoms",
     "GROUPA",
-    "List of atoms in the system group (corresponding to the `system_selection in mlcolvar`)"
+    "First list of atoms (corresponding to the `system_selection in mlcolvar`)"
   );
 
   keys.add(
     "atoms",
     "GROUPB",
-    "List of atoms in the environment group (corresponding to the `environment_selection in mlcolvar`)"
+    "Second list of atoms (corresponding to the `environment_selection in mlcolvar`)"
   );
 
   keys.add(
     "atoms",
     "SUBGROUPA",
-    "List of atoms in the fixed-edge atom group A (corresponding to the `group1_selection in mlcovlar)"
-  );
-
-  keys.add(
-    "atoms",
-    "SUBGROUPB",
-    "List of atoms in the fixed-edge atom group B (corresponding to the `group2_selection in mlcovlar)"
+    "List of subsystem atoms (corresponding to the `subsystem_selection in mlcolvar`)"
   );
 
   keys.add(
@@ -369,10 +333,9 @@ PytorchGNN::PytorchGNN(const ActionOptions& ao):
   log.printf(version_info.data());
 
   // parse input
-  parseAtomList("GROUPA", atom_list_system);
-  parseAtomList("GROUPB", atom_list_environment);
-  parseAtomList("SUBGROUPA", atom_list_subgroupa);
-  parseAtomList("SUBGROUPB", atom_list_subgroupb);
+  parseAtomList("GROUPA", atom_list_a);
+  parseAtomList("GROUPB", atom_list_b);
+  parseAtomList("SUBGROUPA", atom_list_sub_a);
 
   parse("MODEL", model_file_name);
 
@@ -384,7 +347,7 @@ PytorchGNN::PytorchGNN(const ActionOptions& ao):
     plumed_merror("NL_STRIDE should be positive!");
 
   parse("BUFFER", buffer);
-  if (buffer > 0 && atom_list_environment.size() == 0)
+  if (buffer > 0 && atom_list_b.size() == 0)
     plumed_merror("Not GROUPB given! Cannot define the BUFFER key!");
 
   parse("KBLAMBDA", kb_lambda);
@@ -416,34 +379,22 @@ PytorchGNN::PytorchGNN(const ActionOptions& ao):
   checkRead();
 
   // check groups
-  if (atom_list_environment.size() > 0) {
+  if (atom_list_b.size() > 0) {
     if (groups_have_intersection())
       plumed_merror("GROUPA can not intersect with GROUPB!");
-    atom_list_active.resize(atom_list_system.size() + atom_list_environment.size());
+    atom_list_active.resize(atom_list_a.size() + atom_list_b.size());
     atom_list_active.clear();
   } else {
-    atom_list_active.resize(atom_list_system.size());
+    atom_list_active.resize(atom_list_a.size());
     atom_list_active.clear();
     find_active_atoms(1);
   }
-  if ((atom_list_subgroupb.size() > 0 && atom_list_subgroupa.size() == 0)) {
-    plumed_merror("If SUBGROUPB is provided, SUBGROUPA must also be specified!");
-  }
-  for (PLMD::AtomNumber atom : atom_list_subgroupa) {
-    if (std::find(atom_list_system.begin(), atom_list_system.end(), atom) == atom_list_system.end())
-      plumed_merror("All atoms in SUBGROUPA must be in GROUPA!");
-  }
-  if (atom_list_subgroupb.size() > 0) {
-    for (PLMD::AtomNumber atom : atom_list_subgroupb) {
-      if (std::find(atom_list_system.begin(), atom_list_system.end(), atom) == atom_list_system.end())
-        plumed_merror("All atoms in SUBGROUPB must be in GROUPA!");
-    }
-    for (PLMD::AtomNumber atom : atom_list_subgroupb) {
-      if (std::find(atom_list_subgroupa.begin(), atom_list_subgroupa.end(), atom) != atom_list_subgroupa.end()) {
-        plumed_merror("All atoms in SUBGROUPB must not be in SUBGROUPA!");
-      }
-    }
-  }
+  if (atom_list_sub_a.size() > 0)
+    find_active_subgroup_atoms();
+
+  if (atom_list_sub_a.size() > 0)
+    if (!subgroup_is_in_group_a())
+      plumed_merror("Not all atoms in SUBGROUPA present in GROUPA!");
 
   // check precise
   if (use_float64)
@@ -522,9 +473,28 @@ PytorchGNN::PytorchGNN(const ActionOptions& ao):
     r_max = model.attr("r_max").toTensor().item<double>();
   r_max = r_max / atoms.getUnits().getLength() * 0.1; // TODO: remove the `atoms.` prefix when release
 
-  if (model.hasattr("long_cutoff"))
-    long_r_max = model.attr("long_cutoff").toTensor().item<double>();
-  long_r_max = long_r_max / atoms.getUnits().getLength() * 0.1; // TODO: remove the `atoms.` preifx when release
+  // get long cutoff radius
+  if (atom_list_sub_a.size() > 0) {
+    if (!model.hasattr("cutoff_l")) {
+      plumed_merror(
+        "Can not find model attribute: 'cutoff_l'! Such an attributes is required for defining the subsystem group (SUBGROUPA)!"
+      );
+    } else if (model.attr("cutoff_l").toTensor().item<double>() < 0) {
+      plumed_merror(
+        "Model attribute: 'cutoff_l' is negative! A positive long cutoff radius is required for defining the subsystem group (SUBGROUPA)!"
+      );
+    } else {
+      r_max_l = model.attr("cutoff_l").toTensor().item<double>();
+      r_max_l = r_max_l / atoms.getUnits().getLength() * 0.1; // TODO: remove the `atoms.` prefix when release
+    }
+  } else if (
+    model.hasattr("cutoff_l")
+    && model.attr("cutoff_l").toTensor().item<double>() > 0
+  ) {
+    plumed_merror(
+      "Found model attribute: 'cutoff_l'! Such an attributes requires defining the subsystem group (SUBGROUPA)!"
+    );
+  }
 
   // get atomic numbers
   if (!model.hasattr("atomic_numbers"))
@@ -556,7 +526,6 @@ PytorchGNN::PytorchGNN(const ActionOptions& ao):
       );
   }
 
-
   // optimize model
   model.eval();
 #ifdef DO_TORCH_FREEZE_HACK
@@ -586,12 +555,12 @@ PytorchGNN::PytorchGNN(const ActionOptions& ao):
 
   // create system atomic numbers
   std::vector<int> atom_is_required(pdb.getAtomNumbers().size());
-  for (size_t i = 0; i < atom_list_system.size(); i++) {
-    int index = atom_list_system[i].index();
+  for (size_t i = 0; i < atom_list_a.size(); i++) {
+    int index = atom_list_a[i].index();
     atom_is_required[index] = 1;
   }
-  for (size_t i = 0; i < atom_list_environment.size(); i++) {
-    int index = atom_list_environment[i].index();
+  for (size_t i = 0; i < atom_list_b.size(); i++) {
+    int index = atom_list_b[i].index();
     atom_is_required[index] = 1;
   }
 
@@ -639,10 +608,10 @@ PytorchGNN::PytorchGNN(const ActionOptions& ao):
   }
 
   // initialize the neighbor list
-  if (atom_list_environment.size() > 0)
+  if (atom_list_b.size() > 0)
     neighbor_list = Tools::make_unique<NeighborList>(
-      atom_list_system,
-      atom_list_environment,
+      atom_list_a,
+      atom_list_b,
       serial,
       false,
       pbc,
@@ -653,7 +622,7 @@ PytorchGNN::PytorchGNN(const ActionOptions& ao):
     );
   else
     neighbor_list = Tools::make_unique<NeighborList>(
-      atom_list_system,
+      atom_list_a,
       serial,
       pbc,
       getPbc(),
@@ -665,83 +634,49 @@ PytorchGNN::PytorchGNN(const ActionOptions& ao):
 
   // print log
   std::string thename = getLabel();
-  if(atom_list_environment.size() > 0) {
+  if(atom_list_b.size() > 0) {
     log.printf(
       "  Will build graphs using %u system and %u environment atoms\n",
-      static_cast<unsigned>(atom_list_system.size()),
-      static_cast<unsigned>(atom_list_environment.size())
+      static_cast<unsigned>(atom_list_a.size()),
+      static_cast<unsigned>(atom_list_b.size())
     );
-    log.printf("  System atom list (GROUP_SYSTEM):\n");
-    for (unsigned int i = 0; i < atom_list_system.size(); i++) {
+    log.printf("  System atom list (GROUPA):\n");
+    for (unsigned int i = 0; i < atom_list_a.size(); i++) {
       if (((i + 1) % 10) == 0)
         log.printf("\n");
-      log.printf("  %d", atom_list_system[i].serial());
+      log.printf("  %d", atom_list_a[i].serial());
     }
     log.printf("\n");
     log.printf("  Environment atom list (GROUPB):\n");
-    for (unsigned int i = 0; i < atom_list_environment.size(); i++) {
+    for (unsigned int i = 0; i < atom_list_b.size(); i++) {
       if (((i + 1) % 10) == 0)
         log.printf("\n");
-      log.printf("  %d", atom_list_environment[i].serial());
-    }
-    log.printf("\n");
-    if(atom_list_subgroupa.size() > 0) {
-      log.printf("Will build fixed edges using %u GROUPA atoms and %u GROUPB atoms:\n",
-      static_cast<unsigned>(atom_list_subgroupa.size()),
-      static_cast<unsigned>(atom_list_subgroupb.size())
-      );
-      log.printf("  GROUPA atom list:\n");
-      for (unsigned int i = 0; i < atom_list_subgroupa.size(); i++) {
-        if (((i + 1) % 10) == 0)
-          log.printf("\n");
-        log.printf("  %d", atom_list_subgroupa[i].serial());
-      }
-      log.printf("\n");
-      log.printf("  GROUPB atom list:\n");
-      for (unsigned int i = 0; i < atom_list_subgroupb.size(); i++) {
-        if (((i + 1) % 10) == 0)
-          log.printf("\n");
-        log.printf("  %d", atom_list_subgroupb[i].serial());
-      }
+      log.printf("  %d", atom_list_b[i].serial());
     }
     log.printf("\n");
   } else {
     log.printf(
       "  Will build graphs using %u atoms\n",
-      static_cast<unsigned>(atom_list_system.size())
+      static_cast<unsigned>(atom_list_a.size())
     );
     log.printf("  Atom list:\n");
-    for (unsigned int i = 0; i < atom_list_system.size(); i++) {
+    for (unsigned int i = 0; i < atom_list_a.size(); i++) {
       if (((i + 1) % 10) == 0)
         log.printf("\n");
-      log.printf("  %d", atom_list_system[i].serial());
+      log.printf("  %d", atom_list_a[i].serial());
     }
     log.printf("\n");
-    log.printf("  Environment atom list (GROUPB):\n");
-    for (unsigned int i = 0; i < atom_list_environment.size(); i++) {
+  }
+  if (atom_list_sub_a.size() > 0) {
+    log.printf(
+      "  Will add long edges between %u atoms\n",
+      static_cast<unsigned>(atom_list_sub_a.size())
+    );
+    log.printf("  Subsystem atom list:\n");
+    for (unsigned int i = 0; i < atom_list_sub_a.size(); i++) {
       if (((i + 1) % 10) == 0)
         log.printf("\n");
-      log.printf("  %d", atom_list_environment[i].serial());
-    }
-    log.printf("\n");
-    if(atom_list_subgroupa.size() > 0) {
-      log.printf("Will build fixed edges using %u GROUPA atoms and %u GROUPB atoms:\n",
-      static_cast<unsigned>(atom_list_subgroupa.size()),
-      static_cast<unsigned>(atom_list_subgroupb.size())
-      );
-      log.printf("  GROUPA atom list:\n");
-      for (unsigned int i = 0; i < atom_list_subgroupa.size(); i++) {
-        if (((i + 1) % 10) == 0)
-          log.printf("\n");
-        log.printf("  %d", atom_list_subgroupa[i].serial());
-      }
-      log.printf("\n");
-      log.printf("  GROUPB atom list:\n");
-      for (unsigned int i = 0; i < atom_list_subgroupb.size(); i++) {
-        if (((i + 1) % 10) == 0)
-          log.printf("\n");
-        log.printf("  %d", atom_list_subgroupb[i].serial());
-      }
+      log.printf("  %d", atom_list_sub_a[i].serial());
     }
     log.printf("\n");
   }
@@ -754,8 +689,10 @@ PytorchGNN::PytorchGNN(const ActionOptions& ao):
     log.printf("non-periodic\n");
   log.printf("  Neighbor List update stride: %d\n", neighbor_list_stride);
   log.printf("  Graph cutoff radius: %f (PLUMED length unit)\n", r_max);
-  if(atom_list_environment.size() > 0)
+  if (atom_list_b.size() > 0)
     log.printf("  Environment buffer size: %f (PLUMED length unit)\n", buffer);
+  if (atom_list_sub_a.size() > 0)
+    log.printf("  Subsystem cutoff radius: %f (PLUMED length unit)\n", r_max_l);
   log.printf("  Number of outputs: %d \n", n_out);
   log.printf("  Is this a committor model: ");
   if (is_committor)
@@ -848,7 +785,7 @@ void PytorchGNN::calculate()
   // update the neighbor list and number of atoms
   if (neighbor_list->getStride() > 0 && invalidate_list)
     neighbor_list->update(x_local);
-  if (atom_list_environment.size() > 0)
+  if (atom_list_b.size() > 0)
     find_active_atoms(n_threads);
   n_atoms = (int)atom_list_active.size();
   n_threads = std::min(n_threads, n_atoms);
@@ -895,15 +832,13 @@ void PytorchGNN::calculate()
 
   // build edges
   int n_edges = 0;
+  int n_edges_l = 0;
   torch::Tensor edge_index;
-  torch::Tensor edge_labels;
 
-  std::vector<std::vector<int64_t>> edge_index_vector;
-  
-  if (atom_list_environment.size() > 0) {
+  if (atom_list_b.size() > 0) {
     n_edges = n_atoms * (n_atoms - 1);
     std::vector<float> distance_vector(n_edges);
-    // std::vector<std::vector<int64_t>> edge_index_vector;
+    std::vector<std::vector<int64_t>> edge_index_vector;
     edge_index_vector.resize(2, std::vector<int64_t>(n_edges));
 
     #pragma omp parallel for num_threads(n_threads)
@@ -911,6 +846,7 @@ void PytorchGNN::calculate()
       int count = 0;
       for (int j = 0; j < n_atoms; j++) {
         if (i != j) {
+          // NOTE: build edge index using the full local index list
           edge_index_vector[0][i * (n_atoms - 1) + count] = i;
           edge_index_vector[1][i * (n_atoms - 1) + count] = j;
           count++;
@@ -921,7 +857,7 @@ void PytorchGNN::calculate()
     #pragma omp parallel for num_threads(n_threads)
     for (int i = 0; i < n_edges; i++) {
       distance_vector[i] = pbc_tools.distance(
-        true,
+        pbc,
         x_local[atom_list_active[edge_index_vector[0][i]]],
         x_local[atom_list_active[edge_index_vector[1][i]]]
       );
@@ -948,23 +884,19 @@ void PytorchGNN::calculate()
     receivers = receivers.index({mask});
     edge_index = torch::vstack({senders, receivers});
     n_edges = (int)edge_index.size(1);
-    edge_labels = torch::zeros(
-      n_edges, 
-      torch::TensorOptions().dtype(torch::kInt64)
-    );
   } else {
     n_edges = (int)neighbor_list->size() * 2;
     int n_pairs = (int)neighbor_list->size();
-    // std::vector<std::vector<int64_t>> edge_index_vector;
+    std::vector<std::vector<int64_t>> edge_index_vector;
     edge_index_vector.resize(2, std::vector<int64_t>(n_edges));
 
     #pragma omp parallel for num_threads(n_threads)
     for (int i = 0; i < n_pairs; i++) {
-        auto pair = neighbor_list->getClosePair(i);
-        edge_index_vector[0][i] = pair.first;
-        edge_index_vector[1][i] = pair.second;
-        edge_index_vector[0][n_pairs + i] = pair.second;
-        edge_index_vector[1][n_pairs + i] = pair.first;
+      auto pair = neighbor_list->getClosePair(i);
+      edge_index_vector[0][i] = pair.first;
+      edge_index_vector[1][i] = pair.second;
+      edge_index_vector[0][n_pairs + i] = pair.second;
+      edge_index_vector[1][n_pairs + i] = pair.first;
     }
 
     torch::Tensor senders = torch::from_blob(
@@ -978,145 +910,71 @@ void PytorchGNN::calculate()
       torch::TensorOptions().dtype(torch::kInt64)
     );
     edge_index = torch::vstack({senders, receivers});
-    edge_labels = torch::zeros(
-      n_edges, 
-      torch::TensorOptions().dtype(torch::kInt64)
-    );
   }
 
-  if (atom_list_subgroupa.size() > 0 && atom_list_subgroupb.size() > 0) {
-    int groupa_size = atom_list_subgroupa.size();
-    int groupb_size = atom_list_subgroupb.size();
-    int pairs_size = atom_list_subgroupa.size() * atom_list_subgroupb.size();
-    int n_fixed_edges = pairs_size * 2;
-    std::vector<std::vector<int64_t>> fixed_edge_index_vector;
-    fixed_edge_index_vector.resize(2, std::vector<int64_t>(n_fixed_edges));
-    std::vector groupa_indices = find_atom_indices(atom_list_subgroupa, n_threads);
-    std::vector groupb_indices = find_atom_indices(atom_list_subgroupb, n_threads);
+  if (atom_list_sub_a.size() > 0) {
+    torch::Tensor edge_index_l;
+    int n_atoms_l = atom_list_sub_a.size();
+    n_edges_l = n_atoms_l * (n_atoms_l - 1);
+    std::vector<float> distance_vector_l(n_edges_l);
+    std::vector<std::vector<int64_t>> edge_index_vector_l;
+    edge_index_vector_l.resize(2, std::vector<int64_t>(n_edges_l));
+
     #pragma omp parallel for num_threads(n_threads)
-    for (int i = 0; i < groupa_size; i++) {
-        for (int j = 0; j < groupb_size; j++) {
-            int idx = i * groupb_size + j;
-            fixed_edge_index_vector[0][idx] = groupa_indices[i];
-            fixed_edge_index_vector[1][idx] = groupb_indices[j];
-            fixed_edge_index_vector[0][n_fixed_edges/2 + idx] = groupb_indices[j];
-            fixed_edge_index_vector[1][n_fixed_edges/2 + idx] = groupa_indices[i];
+    for (int i = 0; i < n_atoms_l; i++) {
+      int count = 0;
+      for (int j = 0; j < n_atoms_l; j++) {
+        if (i != j) {
+          // NOTE: build edge index using the partial local index list
+          edge_index_vector_l[0][
+            i * (n_atoms_l - 1) + count
+          ] = atom_list_active_subgroup[i];
+          edge_index_vector_l[1][
+            i * (n_atoms_l - 1) + count
+          ] = atom_list_active_subgroup[j];
+          count++;
         }
-    }
-    std::vector<float> distance_vector(n_fixed_edges);
-    #pragma omp parallel for num_threads(n_threads)
-    for (int i = 0; i < n_fixed_edges; i++) {
-      distance_vector[i] = pbc_tools.distance(
-        true,
-        x_local[atom_list_active[fixed_edge_index_vector[0][i]]],
-        x_local[atom_list_active[fixed_edge_index_vector[1][i]]]
-      );
-    }
-    torch::Tensor distance = torch::tensor(distance_vector, torch::TensorOptions().dtype(torch::kFloat32));
-    torch::Tensor senders = torch::tensor(fixed_edge_index_vector[0], torch::TensorOptions().dtype(torch::kInt64));
-    torch::Tensor receivers = torch::tensor(fixed_edge_index_vector[1], torch::TensorOptions().dtype(torch::kInt64));
-
-    const torch::Tensor mask = distance <= long_r_max;
-    senders = senders.index({mask});
-    receivers = receivers.index({mask});
-    torch::Tensor fixed_edge_index = torch::vstack({senders, receivers});  
-
-  torch::Tensor short_edges_all = torch::vstack({edge_index[0], edge_index[1]});
-  torch::Tensor long_edges_all = torch::vstack({fixed_edge_index[0], fixed_edge_index[1]});
-  std::unordered_set<std::string> long_edge_set;
-  const auto long_edges_a = long_edges_all.accessor<int64_t, 2>();
-  for (int64_t j = 0; j < long_edges_all.size(1); j++) {
-      long_edge_set.insert(
-          std::to_string(long_edges_a[0][j]) + "," +
-          std::to_string(long_edges_a[1][j])
-      );
-  }
-  torch::Tensor keep_mask = torch::ones({short_edges_all.size(1)}, torch::kBool);
-  const auto short_edges_a = short_edges_all.accessor<int64_t, 2>();
-  #pragma omp parallel for num_threads(n_threads)
-  for (int64_t i = 0; i < short_edges_all.size(1); i++) {
-    std::string key = std::to_string(short_edges_a[0][i]) + "," +
-                     std::to_string(short_edges_a[1][i]);
-    
-    if (long_edge_set.find(key) != long_edge_set.end()) {
-        keep_mask[i] = false;
-    }
-  }
-  torch::Tensor filtered_edge_index = short_edges_all.index({torch::indexing::Slice(), keep_mask});
-  torch::Tensor filtered_edge_labels = edge_labels.index({keep_mask});
-
-  edge_index = torch::cat({filtered_edge_index, fixed_edge_index}, 1);
-  edge_labels = torch::cat({
-    filtered_edge_labels,
-    torch::ones({fixed_edge_index.size(1)}, torch::kInt64)
-  }, 0);
-  n_edges = edge_index.size(1);
-} else{
-  int groupa_size = atom_list_subgroupa.size();
-  int n_fixed_edges = groupa_size * (groupa_size - 1);
-  std::vector groupa_indices = find_atom_indices(atom_list_subgroupa, n_threads);
-  std::vector<std::vector<int64_t>> fixed_edge_index_vector;
-  fixed_edge_index_vector.resize(2, std::vector<int64_t>(n_fixed_edges));
-  #pragma omp parallel for num_threads(n_threads)
-  for (int i = 0; i < groupa_size; i++) {
-      int idx = i * (groupa_size - 1);  
-      for (int j = 0; j < groupa_size; j++) {
-          if (i != j) {
-              fixed_edge_index_vector[0][idx] = groupa_indices[i];
-              fixed_edge_index_vector[1][idx] = groupa_indices[j];
-              idx++;
-          }
       }
-  }
-  std::vector<float> distance_vector(n_fixed_edges);
-  #pragma omp parallel for num_threads(n_threads)
-  for (int i = 0; i < n_fixed_edges; i++) {
-    distance_vector[i] = pbc_tools.distance(
-      true,
-      x_local[atom_list_active[fixed_edge_index_vector[0][i]]],
-      x_local[atom_list_active[fixed_edge_index_vector[1][i]]]
-    );
-  }
-  torch::Tensor distance = torch::tensor(distance_vector, torch::TensorOptions().dtype(torch::kFloat32));
-  torch::Tensor senders = torch::tensor(fixed_edge_index_vector[0], torch::TensorOptions().dtype(torch::kInt64));
-  torch::Tensor receivers = torch::tensor(fixed_edge_index_vector[1], torch::TensorOptions().dtype(torch::kInt64));
+    }
 
-  const torch::Tensor mask = distance <= long_r_max;
-  senders = senders.index({mask});
-  receivers = receivers.index({mask});
-  torch::Tensor fixed_edge_index = torch::vstack({senders, receivers}); 
-
-  torch::Tensor short_edges_all = torch::vstack({edge_index[0], edge_index[1]});
-  torch::Tensor long_edges_all = torch::vstack({fixed_edge_index[0], fixed_edge_index[1]});
-  std::unordered_set<std::string> long_edge_set;
-  const auto long_edges_a = long_edges_all.accessor<int64_t, 2>();
-  for (int64_t j = 0; j < long_edges_all.size(1); j++) {
-      long_edge_set.insert(
-          std::to_string(long_edges_a[0][j]) + "," +
-          std::to_string(long_edges_a[1][j])
+    #pragma omp parallel for num_threads(n_threads)
+    for (int i = 0; i < n_edges_l; i++) {
+      distance_vector_l[i] = pbc_tools.distance(
+        pbc,
+        x_local[edge_index_vector_l[0][i]],
+        x_local[edge_index_vector_l[1][i]]
       );
-  }
-  torch::Tensor keep_mask = torch::ones({short_edges_all.size(1)}, torch::kBool);
-  const auto short_edges_a = short_edges_all.accessor<int64_t, 2>();
-  #pragma omp parallel for num_threads(n_threads)
-  for (int64_t i = 0; i < short_edges_all.size(1); i++) {
-    std::string key = std::to_string(short_edges_a[0][i]) + "," +
-                     std::to_string(short_edges_a[1][i]);
-    
-    if (long_edge_set.find(key) != long_edge_set.end()) {
-        keep_mask[i] = false;
+    }
+
+    torch::Tensor distances_l = torch::from_blob(
+      distance_vector_l.data(),
+      n_edges_l,
+      torch::TensorOptions().dtype(torch::kFloat32)
+    );
+    const torch::Tensor mask_l = distances_l <= r_max_l;
+
+    if (mask_l.size(0) > 0) {
+      torch::Tensor senders_l = torch::from_blob(
+        edge_index_vector_l[0].data(),
+        n_edges_l,
+        torch::TensorOptions().dtype(torch::kInt64)
+      );
+      torch::Tensor receivers_l = torch::from_blob(
+        edge_index_vector_l[1].data(),
+        n_edges_l,
+        torch::TensorOptions().dtype(torch::kInt64)
+      );
+      senders_l = senders_l.index({mask_l});
+      receivers_l = receivers_l.index({mask_l});
+      edge_index_l = torch::vstack({senders_l, receivers_l});
+      n_edges_l = (int)edge_index_l.size(1);
+
+      edge_index = torch::hstack({edge_index, edge_index_l});
+      n_edges = n_edges + n_edges_l;
     }
   }
-  torch::Tensor filtered_edge_index = short_edges_all.index({torch::indexing::Slice(), keep_mask});
-  torch::Tensor filtered_edge_labels = edge_labels.index({keep_mask});
 
-  edge_index = torch::cat({filtered_edge_index, fixed_edge_index}, 1);
-  edge_labels = torch::cat({
-    filtered_edge_labels,
-    torch::ones({fixed_edge_index.size(1)}, torch::kInt64)
-  }, 0);
-  n_edges = edge_index.size(1);
-}
+  edge_index = edge_index.to(device);
 
   // edge shifts
   torch::Tensor shifts;
@@ -1140,17 +998,13 @@ void PytorchGNN::calculate()
         - torch::index_select(positions_s, 1, edge_index[1])
       );
       unit_shifts = torch::round(deltas).transpose(1, 0);
-      shifts = torch::matmul(
-        cell.transpose(1, 0), unit_shifts.transpose(1, 0)
-      ).transpose(1, 0);
+      shifts = torch::matmul(unit_shifts, cell);
     }
   } else {
     shifts = torch::zeros({n_edges, 3}, torch_float_dtype);
     unit_shifts = torch::zeros({n_edges, 3}, torch_float_dtype);
   }
-  
-  edge_index = edge_index.to(device);
-  edge_labels = edge_labels.to(device);
+
   shifts = shifts.to(device);
   unit_shifts = unit_shifts.to(device);
 
@@ -1171,6 +1025,7 @@ void PytorchGNN::calculate()
   ptr = ptr.to(device);
   weight = weight.to(device);
 
+  // pack the input, call the model
   // TODO: some of these things are required by MACE. We should disable
   // some of them when not using MACE, maybe by distinguishing the MACE model.
   c10::Dict<std::string, torch::Tensor> input;
@@ -1183,22 +1038,31 @@ void PytorchGNN::calculate()
   input.insert("weight", weight);
   input.insert("shifts", shifts);
   input.insert("unit_shifts", unit_shifts);
-  input.insert("edge_labels", edge_labels);
 
   // Optional fields.
-  if (atom_list_environment.size() > 0) {
+  if (atom_list_b.size() > 0) {
     auto system_masks = torch::zeros(
       {n_atoms, 1}, torch::dtype(torch::kBool)
     );
-    for (size_t i = 0; i < atom_list_system.size(); i++)
+    for (size_t i = 0; i < atom_list_a.size(); i++)
       system_masks[i] = true;
     system_masks = system_masks.to(device);
     input.insert("system_masks", system_masks);
 
     auto n_system = torch::ones({1, 1}, torch::dtype(torch::kInt64));
     n_system = n_system.to(device);
-    n_system[0][0] = (int64_t)atom_list_system.size();
+    n_system[0][0] = (int64_t)atom_list_a.size();
     input.insert("n_system", n_system);
+  }
+
+  if (atom_list_sub_a.size() > 0){
+    auto edge_masks_le = torch::ones(
+      {n_edges, 1}, torch::dtype(torch::kBool)
+    );
+    for (int i = 0; i < n_edges - n_edges_l; i++)
+      edge_masks_le[i] = false;
+    edge_masks_le = edge_masks_le.to(device);
+    input.insert("edge_masks_le", edge_masks_le);
   }
 
   // TODO: figure out how to enable virials. Maybe we could port MACE's python
@@ -1279,10 +1143,10 @@ void PytorchGNN::calculate()
     auto gradients_z_sum = torch::sum(torch::pow(gradients_z, 2));
     // chain rules
     auto k_bias_value = kb_lambda * (
-        torch::log(gradients_z_sum + epsilon)
-        - 4.0 * torch::log(1.0 + torch::exp(-sigmoid_p * z))
-        - 2.0 * sigmoid_p * z
-        - torch::log(epsilon)
+      torch::log(gradients_z_sum + epsilon)
+      - 4.0 * torch::log(1.0 + torch::exp(-sigmoid_p * z))
+      - 2.0 * sigmoid_p * z
+      - torch::log(epsilon)
     );
 
     // set committor values
@@ -1358,10 +1222,10 @@ std::string PytorchGNN::model_summary(
     if (level <= level_max) {
       ss << " {\n";
       for (const torch::jit::NameModule& s : module.named_children())
-          ss << torch::jit::jit_log_prefix(
-              "  ",
-              model_summary(s.name, s.value, level_max, level + 1)
-          );
+        ss << torch::jit::jit_log_prefix(
+          "  ",
+          model_summary(s.name, s.value, level_max, level + 1)
+        );
       ss << "  }\n";
     } else {
       ss << " { ... }";
@@ -1375,25 +1239,37 @@ std::string PytorchGNN::model_summary(
 
 bool PytorchGNN::groups_have_intersection(void) {
   std::vector<AtomNumber> intersections;
-  std::vector<AtomNumber> atom_list_system_copy(atom_list_system);
-  std::vector<AtomNumber> atom_list_environment_copy(atom_list_environment);
+  std::vector<AtomNumber> atom_list_a_copy(atom_list_a);
+  std::vector<AtomNumber> atom_list_b_copy(atom_list_b);
 
-  std::sort(atom_list_system_copy.begin(), atom_list_system_copy.end());
-  std::sort(atom_list_environment_copy.begin(), atom_list_environment_copy.end());
+  std::sort(atom_list_a_copy.begin(), atom_list_a_copy.end());
+  std::sort(atom_list_b_copy.begin(), atom_list_b_copy.end());
 
   std::set_intersection(
-    atom_list_system_copy.begin(),
-    atom_list_system_copy.end(),
-    atom_list_environment_copy.begin(),
-    atom_list_environment_copy.end(),
+    atom_list_a_copy.begin(),
+    atom_list_a_copy.end(),
+    atom_list_b_copy.begin(),
+    atom_list_b_copy.end(),
     back_inserter(intersections)
   );
 
   return intersections.size() > 0;
 }
 
+bool PytorchGNN::subgroup_is_in_group_a(void) {
+  std::vector<AtomNumber> atom_list_a_copy(atom_list_a);
+  std::vector<AtomNumber> atom_list_sub_a_copy(atom_list_sub_a);
+  for (auto atom_elt: atom_list_sub_a_copy)
+    if (
+      std::find(atom_list_a_copy.begin(),
+      atom_list_a_copy.end(), atom_elt) == atom_list_a_copy.end()
+    )
+      return false;
+  return true;
+}
+
 void PytorchGNN::find_active_atoms(int n_threads) {
-  if (atom_list_environment.size() > 0) {
+  if (atom_list_b.size() > 0) {
     atom_list_active.clear();
     std::vector<int> neighbors(neighbor_list->size());
 
@@ -1404,37 +1280,35 @@ void PytorchGNN::find_active_atoms(int n_threads) {
     // TODO: make this faster
     std::unordered_set<int> neighbors_set;
     for (int i : neighbors)
-        neighbors_set.insert(i);
+      neighbors_set.insert(i);
     neighbors.assign(neighbors_set.begin(), neighbors_set.end());
 
-    for (size_t i = 0; i < atom_list_system.size(); i++)
+    // NOTE: the system atoms (atom_list_a) should always appear at the head of
+    // this list. Do NOT change the order!
+    for (size_t i = 0; i < atom_list_a.size(); i++)
       atom_list_active.push_back(i);
+    // NOTE: the neighbors should be appended to the tail of this list.
     for (size_t i = 0; i < neighbors.size(); i++)
       atom_list_active.push_back(neighbors[i]);
   } else if (atom_list_active.size() == 0) {
     atom_list_active.clear();
 
-    for (size_t i = 0; i < atom_list_system.size(); i++)
+    for (size_t i = 0; i < atom_list_a.size(); i++)
       atom_list_active.push_back(i);
   }
 }
 
-std::vector<size_t> PytorchGNN::find_atom_indices(
-  const std::vector<AtomNumber>& subgroup,
-  int n_threads)
-{
-  std::vector<std::pair<unsigned, size_t>> temp_pairs(atom_list_system.size());
-    #pragma omp parallel for num_threads(n_threads)
-  for (size_t i = 0; i < atom_list_system.size(); ++i) {
-      temp_pairs[i] = {atom_list_system[i].serial(), i};
+void PytorchGNN::find_active_subgroup_atoms(void) {
+  atom_list_active_subgroup.clear();
+  // NOTE: since system atoms (atom_list_a) always appear at the head of the
+  // local indices, we simply find subsystem indices in atom_list_a.
+  for (auto atom_sub: atom_list_sub_a) {
+    int index = (int)std::distance(
+      atom_list_a.begin(),
+      find(atom_list_a.begin(), atom_list_a.end(), atom_sub)
+    );
+    atom_list_active_subgroup.push_back(index);
   }
-  std::unordered_map<unsigned, size_t> index_map(temp_pairs.begin(), temp_pairs.end());
-  std::vector<size_t> indices(subgroup.size());
-  #pragma omp parallel for num_threads(n_threads)
-  for (size_t i = 0; i < subgroup.size(); ++i) {
-      indices[i] = index_map.at(subgroup[i].serial());
-  }
-  return indices;
 }
 
 } // pytorch_gnn
