@@ -1,0 +1,22 @@
+# vim:ft=plumed
+
+####################################
+#  >> Alanine Dipeptide <<
+####################################
+
+# Load Plumed-torch interface
+#LOAD FILE=../../../plumed-libtorch-interface/PytorchModel.cpp
+
+# Define CVs
+phi: TORSION ATOMS=5,7,9,15
+psi: TORSION ATOMS=7,9,15,17
+
+# Define descriptors
+INCLUDE FILE=../plumed-descriptors.dat
+
+# Define Bias
+opes: OPES_METAD ARG=phi,psi PACE=500 SIGMA=0.2,0.2 TEMP=300 BARRIER=30
+
+PRINT FMT=%g STRIDE=100 FILE=COLVAR ARG=phi,psi,*
+
+ENDPLUMED
