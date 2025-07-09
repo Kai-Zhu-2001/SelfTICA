@@ -14,8 +14,8 @@ for i in range(1, 21):
     shutil.copy(tpr_file, folder)
 
     replaced = template.replace(
-        "../../../train/SelfTICA_NN/1/model.ptc",
-        f"../../../train/SelfTICA_NN/{i}/model.ptc"
+        "../../../train/SelfTICA/NN/model_1.ptc",
+        f"../../../train/SelfTICA/NN/model_{i}.ptc"
     )
     with open(os.path.join(folder, "plumed.dat"), "w") as out:
         out.write(replaced)
