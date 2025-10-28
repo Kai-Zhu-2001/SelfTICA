@@ -1,0 +1,56 @@
+# vim:ft=plumed
+LOAD FILE=../RefCV.cpp
+LOAD FILE=../../../plumed_pytorch_gnn/PytorchGNN.cpp
+
+MOLINFO STRUCTURE=../../data/plumed_topo.pdb PYTHON_BIN=python
+
+GROUP ATOMS={@mdt:{all}} LABEL=g1
+
+PYTORCH_GNN ...
+  GROUPA=g1
+  MODEL=../../models/DeepTDA/model.ptc
+  STRUCTURE=../../data/plumed_topo.pdb
+  NL_STRIDE=5
+  LABEL=gnn
+... PYTORCH_GNN
+
+
+PYTORCH_GNN ...
+  GROUPA=g1
+  MODEL=../../models/SelfTICA/model_good.ptc
+  STRUCTURE=../../data/plumed_topo.pdb
+  NL_STRIDE=5
+  LABEL=tica
+... PYTORCH_GNN
+
+
+energy: ENERGY
+
+vol: VOLUME
+
+REFCV ...
+ SPECIES=1-250
+ SIGMA=0.065
+ LATTICE_CONSTANTS=0.423
+ CRYSTAL_STRUCTURE=BCC
+ LABEL=refcv
+ MORE_THAN={RATIONAL R_0=0.5 NN=12 MM=24}
+ MEAN
+... REFCV
+
+static: OPES_METAD ARG=gnn.node-0,energy,vol BARRIER=100 PACE=100000000 TEMP=400 RESTART=YES FILE=../DeepTDA_9A_0/KERNELS
+
+OPES_METAD ...
+ ARG=tica.node-0
+ TEMP=400
+ BARRIER=70
+ PACE=500
+ FILE=KERNELS
+ RESTART=NO
+... OPES_METAD
+
+Q6 SPECIES=1-250 SWITCH={CUBIC D_0=0.4 D_MAX=0.5} VMEAN LABEL=q6
+diff: MATHEVAL ARG=q6.vmean,refcv.mean FUNC=(x-0.06540)/(0.4035-0.06540)-(y-0.33023)/(0.745086-0.33023) PERIODIC=NO
+UPPER_WALLS ARG=diff AT=0.1 KAPPA=100000 EXP=2 LABEL=uwall
+
+PRINT ARG=* FILE=COLVAR STRIDE=500
