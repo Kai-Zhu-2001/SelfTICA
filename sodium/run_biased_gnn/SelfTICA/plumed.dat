@@ -38,7 +38,8 @@ REFCV ...
  MEAN
 ... REFCV
 
-static: OPES_METAD ARG=gnn.node-0,energy,vol BARRIER=100 PACE=100000000 TEMP=400 RESTART=YES FILE=../DeepTDA_9A_0/KERNELS
+# uncomment to enable the static bias (requires to first perform a OPES simulation)
+#static: OPES_METAD ARG=gnn.node-0,energy,vol BARRIER=100 PACE=100000000 TEMP=400 RESTART=YES FILE=../DeepTDA_9A_0/KERNELS
 
 OPES_METAD ...
  ARG=tica.node-0
