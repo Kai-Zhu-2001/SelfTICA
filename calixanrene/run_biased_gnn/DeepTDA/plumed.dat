@@ -1,0 +1,64 @@
+# vim:ft=plumed
+LOAD FILE=../../../plumed_pytorch_gnn/PytorchGNN.cpp
+
+MOLINFO STRUCTURE=../../data/plumed_topo.pdb PYTHON_BIN=python
+GROUP ATOMS={@mdt:{index 0 1 2 3 4 5 8 23 35 48 54 143 144 145 72 78 84 90}} LABEL=g1
+GROUP ATOMS={@mdt:{water and type O}} LABEL=g2
+
+# --- (0) GNN_CV
+
+PYTORCH_GNN ...
+  GROUPA=g1
+  GROUPB=g2
+  SUBGROUPA=g1
+  MODEL=../../train/Deep-TDA/twocut_6/model_twocut.ptc
+  STRUCTURE=../../data/plumed_topo.pdb
+  BUFFER=0.1
+  NL_STRIDE=5
+#  CUDA
+  LABEL=gnn
+... PYTORCH_GNN
+
+# --- (1) ATOMS DEFINITIONS and ALIGNMENT ---
+
+HOST: GROUP ATOMS=16-211      #host atoms
+LIGC: GROUP ATOMS=1-7,9  #carbon atoms in the ligand
+WO: GROUP ATOMS=221-6520:3    #water oxygen atoms
+
+WHOLEMOLECULES ENTITY0=HOST
+FIT_TO_TEMPLATE STRIDE=1 REFERENCE=../../data/conf_template.pdb TYPE=OPTIMAL #coordinates alignment
+lig: CENTER ATOMS=LIGC
+
+# --- (2) DESCRIPTORS
+v1: FIXEDATOM AT=2.0136,2.0136,2.0   #virtual atoms
+v2: FIXEDATOM AT=2.0136,2.0136,2.25
+
+cyl: DISTANCE ATOMS=v1,lig COMPONENTS
+radius: MATHEVAL ARG=cyl.x,cyl.y FUNC=sqrt(x*x+y*y) PERIODIC=NO
+
+V2: COORDINATION GROUPA=v2 GROUPB=WO SWITCH={RATIONAL D_0=0.0 R_0=0.25 NN=2 MM=6} NLIST NL_CUTOFF=1.0 NL_STRIDE=5
+
+# --- (3) funnel
+
+funnel: MATHEVAL ARG=radius,cyl.z VAR=r,z FUNC=(r+1.0*(-1.2+z))*step(-z+1.)+(r-0.2)*step(z-1.) PERIODIC=NO
+UPPER_WALLS AT=0 ARG=funnel KAPPA=2000.0 LABEL=funnelwall  #funnel restraint
+UPPER_WALLS AT=1.8 ARG=cyl.z KAPPA=4000.0 EXP=2 LABEL=upper_wall  #upper limit of cyl.z
+#LOWER_WALLS AT=0 ARG=cyl.z KAPPA=4000.0 EXP=2 LABEL=lower_wall  #lower limit of cyl.z
+
+# --- (4) opes explore
+
+OPES_METAD ...
+  LABEL=opes
+  ARG=gnn.node-0
+  FILE=KERNELS
+  STATE_RFILE=COMPRESSED.KERNELS
+  STATE_WFILE=COMPRESSED.KERNELS
+  PACE=500
+  TEMP=300
+  BARRIER=50
+  RESTART=NO
+... OPES_METAD
+
+PRINT ARG=* STRIDE=500 FILE=COLVAR FMT=%8.4f
+
+ENDPLUMED
