@@ -1,0 +1,55 @@
+# vim:ft=plumed
+LOAD FILE=../../../plumed_pytorch_gnn/PytorchGNN.cpp
+
+MOLINFO STRUCTURE=../../data/plumed_topo.pdb PYTHON_BIN=python
+GROUP ATOMS={@mdt:{protein and not type H}} LABEL=g1
+GROUP ATOMS={@mdt:{index 4 25 46 60 72 87 101 108 122 146}} LABEL=g2
+
+#  GNN_CV
+
+PYTORCH_GNN ...
+  GROUPA=g1
+  SUBGROUPA=g2
+  MODEL=../../train/models/SelfTICA_GNN/model_good.ptc
+  STRUCTURE=../../data/plumed_topo.pdb
+  NL_STRIDE=5
+#  CUDA
+  LABEL=gnn
+... PYTORCH_GNN
+
+
+#generated with gmx editconf -f topol.tpr -o reference.pdb, see https://www.plumed.org/doc-v2.7/user-doc/html/_m_o_l_i_n_f_o.html
+MOLINFO MOLTYPE=protein STRUCTURE=../../data/chignolin-ref.pdb
+WHOLEMOLECULES ENTITY0=1-166
+
+
+# Select Calpha
+PROTEIN: GROUP ATOMS=1-166
+CA: GROUP ATOMS=5,26,47,61,73,88,102,109,123,147
+# RMSD
+rmsd_ca: RMSD REFERENCE=../../data/chignolin-ca.pdb TYPE=OPTIMAL
+# END-TO-END DISTANCE
+end: DISTANCE ATOMS=5,147
+# HBONDS
+hbonds: CONTACTMAP ATOMS1=23,145 ATOMS2=45,120 ATOMS3=56,100 ATOMS4=56,107 SWITCH={RATIONAL R_0=0.4 NN=6 MM=8} SUM
+ene: ENERGY
+
+mc: ECV_MULTITHERMAL ARG=ene TEMP=340 TEMP_MIN=270 TEMP_MAX=700
+
+# uncomment to enable the static bias (requires to first perform a OPES multithermal simulation)
+#static: OPES_EXPANDED PACE=100000000 ARG=mc.* WALKERS_MPI FILE=../../run_biased_multi/DELTAF RESTART=YES 
+
+# OPES
+opes: OPES_METAD ...
+    ARG=gnn.node-0
+    BARRIER=20
+    #SIGMA=0.1
+    PACE=500
+    TEMP=340.0
+    #FILE=./KERNELS
+    WALKERS_MPI
+    RESTART=NO
+...
+
+# PRINT
+PRINT STRIDE=500 ARG=*  FILE=COLVAR
