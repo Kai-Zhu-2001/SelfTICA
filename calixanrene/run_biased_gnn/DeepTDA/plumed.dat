@@ -11,7 +11,7 @@ PYTORCH_GNN ...
   GROUPA=g1
   GROUPB=g2
   SUBGROUPA=g1
-  MODEL=../../train/Deep-TDA/twocut_6/model_twocut.ptc
+  MODEL=../../models/DeepTDA_GNN/model_6AA.ptc
   STRUCTURE=../../data/plumed_topo.pdb
   BUFFER=0.1
   NL_STRIDE=5
@@ -45,7 +45,7 @@ UPPER_WALLS AT=0 ARG=funnel KAPPA=2000.0 LABEL=funnelwall  #funnel restraint
 UPPER_WALLS AT=1.8 ARG=cyl.z KAPPA=4000.0 EXP=2 LABEL=upper_wall  #upper limit of cyl.z
 #LOWER_WALLS AT=0 ARG=cyl.z KAPPA=4000.0 EXP=2 LABEL=lower_wall  #lower limit of cyl.z
 
-# --- (4) opes explore
+# --- (4) opes
 
 OPES_METAD ...
   LABEL=opes
