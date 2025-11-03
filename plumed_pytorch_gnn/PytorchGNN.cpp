@@ -169,12 +169,15 @@ PYTORCH_GNN ...
 class PytorchGNN: public Colvar
 {
   int n_out = 0;
+  int summary_level = 3;
   bool pbc = true;
   bool serial = false;
   bool firsttime = true;
   bool invalidate_list = true;
   bool is_committor = false;
   bool k_bias = false;
+  bool kb_weighted = false;
+  bool kb_truncated = false;
   double r_max = 0.0; // In PLUMED length unit
   double buffer = 0.0; // In PLUMED length unit
   double r_max_l = -1.0; // In PLUMED length unit
@@ -182,9 +185,11 @@ class PytorchGNN: public Colvar
   double kb_epsilon = -1.0;
   double kb_sigmoid_p = -1.0;
   std::string model_file_name;
+  std::string model_training_time;
   std::string structure_file_name;
   std::vector<int> system_node_types;
   std::vector<int> model_atomic_numbers;
+  std::vector<double> model_atomic_masses;
   std::vector<AtomNumber> atom_list_a;
   std::vector<AtomNumber> atom_list_b;
   std::vector<AtomNumber> atom_list_sub_a;
@@ -208,6 +213,7 @@ class PytorchGNN: public Colvar
   std::string model_summary(
     std::string model_name, torch::jit::Module module, int level_max, int level
   );
+  int get_number_of_parameters(void);
   int atomic_number_from_name(std::string name);
   bool groups_have_intersection(void);
   bool subgroup_is_in_group_a(void);
@@ -282,6 +288,12 @@ void PytorchGNN::registerKeywords(Keywords& keys)
     "The EPSILON value for calculating $V_K$. Only vaild for GNN committor models, the default value depends on the model precision"
   );
 
+  keys.add(
+    "optional",
+    "_SUMMARYLEVEL",
+    "Maximum verbosity level for the model structure printing"
+  );
+
   keys.addFlag(
     "CUDA",
     false,
@@ -304,6 +316,18 @@ void PytorchGNN::registerKeywords(Keywords& keys)
     "KBIAS",
     false,
     "Calculate Kang's bias potential $V_K$ (a.k.a. Kolmogolov's bias). Only vaild for GNN committor models"
+  );
+
+  keys.addFlag(
+    "KBWEIGHTED",
+    false,
+    "Calculate mass-weighted (exact) $V_K$. Only vaild for GNN committor models"
+  );
+
+  keys.addFlag(
+    "KBTRUNCATED",
+    false,
+    "Calculate truncated (twisted) $V_K$. Only vaild for GNN committor models"
   );
 
   keys.addOutputComponent(
@@ -353,6 +377,8 @@ PytorchGNN::PytorchGNN(const ActionOptions& ao):
   parse("KBLAMBDA", kb_lambda);
   parse("KBEPSILON", kb_epsilon);
 
+  parse("_SUMMARYLEVEL", summary_level);
+
   bool use_cuda = false;
   bool required_cuda = false;
   parseFlag("CUDA", required_cuda);
@@ -375,6 +401,8 @@ PytorchGNN::PytorchGNN(const ActionOptions& ao):
   pbc = !nopbc;
 
   parseFlag("KBIAS", k_bias);
+  parseFlag("KBWEIGHTED", kb_weighted);
+  parseFlag("KBTRUNCATED", kb_truncated);
 
   checkRead();
 
@@ -439,7 +467,8 @@ PytorchGNN::PytorchGNN(const ActionOptions& ao):
   model.to(torch_float_dtype);
 
   // summary
-  std::string model_architecture = model_summary("CV", model, 3, 0);
+  int model_parameters = get_number_of_parameters();
+  std::string model_architecture = model_summary("CV", model, summary_level, 0);
 
   // get CV length
   if (!model.hasattr("n_out") && !model.hasattr("n_cvs"))
@@ -524,6 +553,40 @@ PytorchGNN::PytorchGNN(const ActionOptions& ao):
       plumed_merror(
         "Can not load the sigmoid_p value from the model!"
       );
+    if (k_bias && kb_weighted) {
+      auto atomic_masses = model.attr("atomic_masses").toTensor();
+      for (int64_t i = 0; i < atomic_masses.size(0); i++)
+        model_atomic_masses.push_back(atomic_masses[i].item<double>());
+      if (model_atomic_masses.size() != model_atomic_numbers.size())
+        plumed_merror(
+          "Mismatch between model attributes: 'atomic_numbers' and 'atomic_masses'!"
+        );
+    }
+  }
+
+  // training time
+  if (model.hasattr("training_time")) {
+    auto ts = model.attr("training_time").toTensor();
+    std::stringstream ss_time;
+    ss_time
+      << "UTC"
+      << (ts[0].item<int64_t>() >= 0 ? "+" : "")
+      << std::to_string(ts[0].item<int64_t>())
+      << " "
+      << std::to_string(ts[1].item<int64_t>())
+      << "-"
+      << std::setw(2) << std::setfill('0') << std::to_string(ts[2].item<int64_t>())
+      << "-"
+      << std::setw(2) << std::setfill('0') << std::to_string(ts[3].item<int64_t>())
+      << " "
+      << std::setw(2) << std::setfill('0') << std::to_string(ts[4].item<int64_t>())
+      << ":"
+      << std::setw(2) << std::setfill('0') << std::to_string(ts[5].item<int64_t>())
+      << ":"
+      << std::setw(2) << std::setfill('0') << std::to_string(ts[6].item<int64_t>());
+    model_training_time = ss_time.str();
+  } else {
+    model_training_time = "unknown";
   }
 
   // optimize model
@@ -706,6 +769,18 @@ PytorchGNN::PytorchGNN(const ActionOptions& ao):
     else
       log.printf("no\n");
     if (k_bias) {
+      log.printf("  If calculate truncated V_K: ");
+        if (kb_truncated)
+          log.printf("yes\n");
+        else
+          log.printf("no\n");
+      log.printf("  If calculate mass-weighted V_K: ");
+      if (kb_weighted) {
+        log.printf("yes\n");
+        log << "  Model atomic masses: " << model_atomic_masses << "\n";
+      } else {
+        log.printf("no\n");
+      }
       log.printf("  LAMBDA    value for calculating V_K: %f\n", kb_lambda);
       log.printf("  EPSILON   value for calculating V_K: %e\n", kb_epsilon);
       log.printf("  SIGMOID_P value for calculating V_K: %e\n", kb_sigmoid_p);
@@ -725,9 +800,12 @@ PytorchGNN::PytorchGNN(const ActionOptions& ao):
     log.printf("CPU (CUDA device not found/LibTorch does not support CUDA)\n");
   else
     log.printf("CPU (as required)\n");
+  log << "  Model file name: " + model_file_name + "\n";
+  log << "  Model training time: " + model_training_time + "\n";
+  log << "  Model parameters: " + std::to_string(model_parameters) + "\n";
   log << "  Model architecture: \n";
   log << model_architecture;
-  log.printf("  Bibliography: ");
+  log << "  Bibliography: ";
   log << plumed.cite("Zhang et al., J. Chem. Theory Comput. 20, 24, 10787–10797 (2024)");
   log << plumed.cite("Bonati, Trizio, Rizzi and Parrinello, J. Chem. Phys. 159, 014801 (2023)");
   log << plumed.cite("Bonati, Rizzi and Parrinello, J. Phys. Chem. Lett. 11, 2998-3004 (2020)");
@@ -1129,6 +1207,7 @@ void PytorchGNN::calculate()
     }
   } else {
     auto z = output[0][0];
+    auto q = output[0][1];
     auto epsilon = torch::tensor(kb_epsilon, torch_float_dtype).to(device);
     auto sigmoid_p = torch::tensor(kb_sigmoid_p, torch_float_dtype).to(device);
     // get bias value
@@ -1139,15 +1218,36 @@ void PytorchGNN::calculate()
       true,          // retain_graph
       true           // create_graph
     )[0];
-    // square and sum over all dims
-    auto gradients_z_sum = torch::sum(torch::pow(gradients_z, 2));
+    // square
+    gradients_z = torch::pow(gradients_z, 2);
+    // mass-weighting
+    if (kb_weighted) {
+      auto node_masses = torch::zeros({n_atoms, 1}, torch_float_dtype);
+      #pragma omp parallel for num_threads(n_threads)
+      for (int i = 0; i < n_atoms; i++) {
+        int index = atom_list_active[i];
+        int node_type = system_node_types[getAbsoluteIndex(index).index()];
+        node_masses[i][0] = model_atomic_masses[node_type];
+      }
+      node_masses = node_masses.to(device);
+      gradients_z = gradients_z / node_masses;
+    }
+    // sum over all dims
+    auto gradients_z_sum = torch::sum(gradients_z);
     // chain rules
-    auto k_bias_value = kb_lambda * (
-      torch::log(gradients_z_sum + epsilon)
-      - 4.0 * torch::log(1.0 + torch::exp(-sigmoid_p * z))
-      - 2.0 * sigmoid_p * z
-      - torch::log(epsilon)
-    );
+    auto k_bias_value = torch::ones(1, torch_float_dtype).to(device);
+    if (!kb_truncated)
+      k_bias_value = kb_lambda * (
+        torch::log(gradients_z_sum + epsilon)
+        - 4.0 * torch::log(1.0 + torch::exp(-sigmoid_p * z))
+        - 2.0 * sigmoid_p * z
+        - torch::log(epsilon)
+      );
+    else
+      k_bias_value = kb_lambda * (
+        torch::log(gradients_z_sum * torch::pow(q * (1 - q), 2) + epsilon)
+        - torch::log(epsilon)
+      );
 
     // set committor values
     string name_comp_z = "node-0";
@@ -1309,6 +1409,16 @@ void PytorchGNN::find_active_subgroup_atoms(void) {
     );
     atom_list_active_subgroup.push_back(index);
   }
+}
+
+int PytorchGNN::get_number_of_parameters(void)
+{
+  int n_parameters = 0;
+
+  for (auto p: model.parameters())
+    n_parameters += p.numel();
+
+  return n_parameters;
 }
 
 } // pytorch_gnn
