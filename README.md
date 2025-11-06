@@ -1,6 +1,7 @@
 #### Supporting data for the paper:
 ## "Everything everywhere all at once, a probability-based enhanced sampling approach to rare events"
 ### Repo structure
+- **tutorials**: contains detailed tutorials for the training of the SelfTICA CV and the dual-cutoff GNN framework.
 - **plumed_pytorch_gnn**: contains the plumed interface for GNN-based CVs
 - **alanine**:  files for alanine dipeptide in vacuum using `Gromacs`
   - **data**: topology files
