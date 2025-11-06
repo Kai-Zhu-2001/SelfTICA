@@ -10,7 +10,7 @@ WO: GROUP ATOMS=221-6520:3    #water oxygen atoms
 LIGC_new: GROUP ATOMS=1,4,8,9
 
 WHOLEMOLECULES ENTITY0=HOST
-FIT_TO_TEMPLATE STRIDE=1 REFERENCE=../../data/conf_template.pdb TYPE=OPTIMAL #coordinates alignment
+FIT_TO_TEMPLATE STRIDE=1 REFERENCE=../data/conf_template.pdb TYPE=OPTIMAL #coordinates alignment
 lig: CENTER ATOMS=LIGC
 lig_new: CENTER ATOMS=LIGC_new
 #DUMPDERIVATIVES FILE=deriv ARG=lig_new STRIDE=500
