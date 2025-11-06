@@ -10,7 +10,7 @@ GROUP ATOMS={@mdt:{index 4 25 46 60 72 87 101 108 122 146}} LABEL=g2
 PYTORCH_GNN ...
   GROUPA=g1
   SUBGROUPA=g2
-  MODEL=../../train/models/SelfTICA_GNN/model_good.ptc
+  MODEL=../../models/SelfTICA_GNN/model_good.ptc
   STRUCTURE=../../data/plumed_topo.pdb
   NL_STRIDE=5
 #  CUDA
