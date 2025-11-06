@@ -1,5 +1,5 @@
 # vim:ft=plumed
-LOAD FILE=../../PytorchGNN.cpp
+LOAD FILE=../../../../plumed_pytorch_gnn/PytorchGNN.cpp
 
 MOLINFO STRUCTURE=../../../data/plumed_topo.pdb PYTHON_BIN=python
 GROUP ATOMS={@mdt:{protein and not type H}} LABEL=g1
