@@ -9,7 +9,7 @@ psi: TORSION ATOMS=7,9,15,17
 
 PYTORCH_GNN ...
   GROUPA=g1
-  MODEL=../../../train/DeepTICA_GNN/1/model.ptc
+  MODEL=../../../models/DeepTICA/GNN/model_1.ptc
   STRUCTURE=../../../data/plumed_topo.pdb
   NL_STRIDE=1000
   FLOAT64
@@ -25,3 +25,4 @@ OPES_METAD ...
 ... OPES_METAD
 
 PRINT FMT=%g STRIDE=500 FILE=COLVAR ARG=*
+
