@@ -1,7 +1,7 @@
 # vim:ft=plumed
-LOAD FILE=../../../../plumed_pytorch_gnn/PytorchGNN.cpp
+LOAD FILE=../../../plumed_pytorch_gnn/PytorchGNN.cpp
 
-MOLINFO STRUCTURE=../../../data/plumed_topo.pdb PYTHON_BIN=python
+MOLINFO STRUCTURE=../../data/plumed_topo.pdb PYTHON_BIN=python
 GROUP ATOMS={@mdt:{index 0 1 2 3 4 5 8 23 35 48 54 143 144 145 72 78 84 90}} LABEL=g1
 GROUP ATOMS={@mdt:{water and type O}} LABEL=g2
 
@@ -10,8 +10,8 @@ PYTORCH_GNN ...
   GROUPA=g1
   GROUPB=g2
   SUBGROUPA=g1
-  MODEL=../../../train/Deep-TDA/twocut_4/model_twocut.ptc
-  STRUCTURE=../../../data/plumed_topo.pdb
+  MODEL=../../models/DeepTDA_GNN/model_4AA.ptc
+  STRUCTURE=../../data/plumed_topo.pdb
   BUFFER=0.1
   NL_STRIDE=5
 #  CUDA
@@ -22,8 +22,8 @@ PYTORCH_GNN ...
   GROUPA=g1
   GROUPB=g2
   SUBGROUPA=g1
-  MODEL=../../../train/SelfTICA_GNN/model.ptc
-  STRUCTURE=../../../data/plumed_topo.pdb
+  MODEL=../../models/SelfTICA_GNN/model_good.ptc
+  STRUCTURE=../../data/plumed_topo.pdb
   BUFFER=0.1
   NL_STRIDE=5
 #  CUDA
@@ -36,7 +36,7 @@ LIGC: GROUP ATOMS=1-7,9  #carbon atoms in the ligand
 WO: GROUP ATOMS=221-6520:3    #water oxygen atoms
 
 WHOLEMOLECULES ENTITY0=HOST
-FIT_TO_TEMPLATE STRIDE=1 REFERENCE=../../../data/conf_template.pdb TYPE=OPTIMAL #coordinates alignment
+FIT_TO_TEMPLATE STRIDE=1 REFERENCE=../../data/conf_template.pdb TYPE=OPTIMAL #coordinates alignment
 lig: CENTER ATOMS=LIGC
 
 # --- (2) DESCRIPTORS
