@@ -1,5 +1,5 @@
 # vim:ft=plumed
-LOAD FILE=../RefCV.cpp
+LOAD FILE=../../RefCV.cpp
 LOAD FILE=../../../plumed_pytorch_gnn/PytorchGNN.cpp
 
 MOLINFO STRUCTURE=../../data/plumed_topo.pdb PYTHON_BIN=python
@@ -8,7 +8,7 @@ GROUP ATOMS={@mdt:{all}} LABEL=g1
 
 PYTORCH_GNN ...
   GROUPA=g1
-  MODEL=../../models/DeepTDA/model.ptc
+  MODEL=../../models/DeepTDA_GNN/model.ptc
   STRUCTURE=../../data/plumed_topo.pdb
   NL_STRIDE=5
   LABEL=gnn
@@ -17,7 +17,7 @@ PYTORCH_GNN ...
 
 PYTORCH_GNN ...
   GROUPA=g1
-  MODEL=../../models/SelfTICA/model_good.ptc
+  MODEL=../../models/SelfTICA_GNN/model_good.ptc
   STRUCTURE=../../data/plumed_topo.pdb
   NL_STRIDE=5
   LABEL=tica
