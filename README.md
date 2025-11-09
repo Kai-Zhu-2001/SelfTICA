@@ -16,11 +16,11 @@
   - **run_biased_multi**: input files for multithermal simulations
   - **run_biased_multi_gnn**: input files for multi-walker biased simulations using gnn-based SelfTICA CVs
 - **sodium**: files for sodium phase transition using `LAMMPS`
-  - **data**: topology files
+  - **data**: topology files and force field files
   - **models**: frozen torchscript models
   - **run_unibased**: input files for unibased simulations in both liquid and solid states
   - **run_biased_gnn**: input files for biased simulations using gnn-based SelfTICA CVs
-  - **run_biased_ref**: input files for biased simulations using order parameter, potential energy, and volumeas as CVs
+  - **run_biased_ref**: input files for biased simulations using order parameter, potential energy, and volume as CVs
 - **calixarene**: files for OAMe-G2 binding in explicit water using `Gromacs`
   - **data**: topology files
   - **models**: frozen torchscript models
