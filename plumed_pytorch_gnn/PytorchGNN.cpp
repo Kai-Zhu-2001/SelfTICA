@@ -178,6 +178,7 @@ class PytorchGNN: public Colvar
   bool k_bias = false;
   bool kb_weighted = false;
   bool kb_truncated = false;
+  bool bailout_fusion = false;
   double r_max = 0.0; // In PLUMED length unit
   double buffer = 0.0; // In PLUMED length unit
   double r_max_l = -1.0; // In PLUMED length unit
@@ -313,6 +314,12 @@ void PytorchGNN::registerKeywords(Keywords& keys)
   );
 
   keys.addFlag(
+    "_BAILOUTFUSION",
+    false,
+    "Use a faster LibTorch fusion strategy (experimental)"
+  );
+
+  keys.addFlag(
     "KBIAS",
     false,
     "Calculate Kang's bias potential $V_K$ (a.k.a. Kolmogolov's bias). Only vaild for GNN committor models"
@@ -403,6 +410,8 @@ PytorchGNN::PytorchGNN(const ActionOptions& ao):
   parseFlag("KBIAS", k_bias);
   parseFlag("KBWEIGHTED", kb_weighted);
   parseFlag("KBTRUNCATED", kb_truncated);
+
+  parseFlag("_BAILOUTFUSION", bailout_fusion);
 
   checkRead();
 
@@ -589,6 +598,16 @@ PytorchGNN::PytorchGNN(const ActionOptions& ao):
     model_training_time = "unknown";
   }
 
+  // idk ... stolen from:
+  // https://stackoverflow.com/questions/77102532/libtorch-performance-issue-when-using-multiple-gpus-in-multiple-threads
+  if (bailout_fusion) {
+    torch::jit::FusionStrategy bailout = {
+      {torch::jit::FusionBehavior::STATIC,  0},
+      {torch::jit::FusionBehavior::DYNAMIC, 0},
+    };
+    torch::jit::setFusionStrategy(bailout);
+  }
+
   // optimize model
   model.eval();
 #ifdef DO_TORCH_FREEZE_HACK
@@ -609,7 +628,7 @@ PytorchGNN::PytorchGNN(const ActionOptions& ao):
 #endif
 
   // optimize model for inference
-#if (TORCH_VERSION_MAJOR == 2 || TORCH_VERSION_MAJOR == 1 && TORCH_VERSION_MINOR >= 10)
+#ifndef DO_TORCH_FREEZE_HACK
   model = torch::jit::optimize_for_inference(model);
 #endif
 
@@ -806,6 +825,8 @@ PytorchGNN::PytorchGNN(const ActionOptions& ao):
   log << "  Model architecture: \n";
   log << model_architecture;
   log << "  Bibliography: ";
+  if (is_committor || r_max_l > 0 || atom_list_b.size() > 0)
+    log << plumed.cite("Kang et al. arXiv preprint arXiv:2510.18018 (2025)");
   log << plumed.cite("Zhang et al., J. Chem. Theory Comput. 20, 24, 10787–10797 (2024)");
   log << plumed.cite("Bonati, Trizio, Rizzi and Parrinello, J. Chem. Phys. 159, 014801 (2023)");
   log << plumed.cite("Bonati, Rizzi and Parrinello, J. Phys. Chem. Lett. 11, 2998-3004 (2020)");
@@ -874,39 +895,57 @@ void PytorchGNN::calculate()
   // get the positions
   // TODO: now, the positions used by the model file is in unit of Angstrom.
   // We should warn the users about this default
-  auto positions = torch::empty({n_atoms, 3}, torch_float_dtype);
+  std::vector<float> positions_vector(n_atoms * 3);
   #pragma omp parallel for num_threads(n_threads)
   for (int i = 0; i < n_atoms; i++) {
     int index = atom_list_active[i];
-    positions[i][0] = x_local[index][0] * to_ang;
-    positions[i][1] = x_local[index][1] * to_ang;
-    positions[i][2] = x_local[index][2] * to_ang;
+    positions_vector[i * 3 + 0] = x_local[index][0] * to_ang;
+    positions_vector[i * 3 + 1] = x_local[index][1] * to_ang;
+    positions_vector[i * 3 + 2] = x_local[index][2] * to_ang;
   }
-  positions = positions.to(device);
+  torch::Tensor positions = torch::from_blob(
+    positions_vector.data(),
+    n_atoms * 3,
+    torch::TensorOptions().dtype(torch::kFloat32)
+  );
+  positions = positions.to(device).to(torch_float_dtype);
+  positions = positions.reshape({n_atoms, 3});
 
   // cell
   // TODO: now, the box data used by the model file is in unit of Angstrom.
   // We should warn the users about this default
   PLMD::Tensor box = getBox();
-  auto cell = torch::zeros({3, 3}, torch_float_dtype);
+  std::vector<float> cell_vector(9);
   for (int i = 0; i < 3; i++) {
     for (int j = 0; j < 3; j++)
-      cell[i][j] = box[i][j] * to_ang;
+      cell_vector[i * 3 + j] = box[i][j] * to_ang;
   }
-  cell = cell.to(device);
+  torch::Tensor cell = torch::from_blob(
+    cell_vector.data(),
+    9,
+    torch::TensorOptions().dtype(torch::kFloat32)
+  );
+  cell = cell.to(device).to(torch_float_dtype);
+  cell = cell.reshape({3, 3});
 
   // build node attributes
   // TODO: now, the node attributes are in MACE's format.
   // We should try to give more options, or warn the users about this default
   int n_node_feats = (int)model_atomic_numbers.size();
-  auto node_attrs = torch::zeros({n_atoms, n_node_feats}, torch_float_dtype);
+  std::vector<float> node_attrs_vector(n_node_feats * n_atoms);
   #pragma omp parallel for num_threads(n_threads)
   for (int i = 0; i < n_atoms; i++) {
     int index = atom_list_active[i];
     int node_type = system_node_types[getAbsoluteIndex(index).index()];
-    node_attrs[i][node_type] = 1.0;
+    node_attrs_vector[i * n_node_feats + node_type] = 1.0;
   }
-  node_attrs = node_attrs.to(device);
+  torch::Tensor node_attrs = torch::from_blob(
+    node_attrs_vector.data(),
+    n_node_feats * n_atoms,
+    torch::TensorOptions().dtype(torch::kFloat32)
+  );
+  node_attrs = node_attrs.to(device).to(torch_float_dtype);
+  node_attrs = node_attrs.reshape({n_atoms, n_node_feats});
 
   // build edges
   int n_edges = 0;
@@ -1119,11 +1158,14 @@ void PytorchGNN::calculate()
 
   // Optional fields.
   if (atom_list_b.size() > 0) {
-    auto system_masks = torch::zeros(
-      {n_atoms, 1}, torch::dtype(torch::kBool)
-    );
-    for (size_t i = 0; i < atom_list_a.size(); i++)
-      system_masks[i] = true;
+    auto system_masks = torch::vstack({
+      torch::ones(
+        {(int64_t)atom_list_a.size(), 1}, torch::dtype(torch::kBool)
+      ),
+      torch::zeros(
+        {n_atoms - (int64_t)atom_list_a.size(), 1}, torch::dtype(torch::kBool)
+      ),
+    });
     system_masks = system_masks.to(device);
     input.insert("system_masks", system_masks);
 
@@ -1134,11 +1176,10 @@ void PytorchGNN::calculate()
   }
 
   if (atom_list_sub_a.size() > 0){
-    auto edge_masks_le = torch::ones(
-      {n_edges, 1}, torch::dtype(torch::kBool)
-    );
-    for (int i = 0; i < n_edges - n_edges_l; i++)
-      edge_masks_le[i] = false;
+    auto edge_masks_le = torch::vstack({
+      torch::zeros({n_edges - n_edges_l, 1}, torch::dtype(torch::kBool)),
+      torch::ones({n_edges_l, 1}, torch::dtype(torch::kBool)),
+    });
     edge_masks_le = edge_masks_le.to(device);
     input.insert("edge_masks_le", edge_masks_le);
   }
@@ -1219,21 +1260,27 @@ void PytorchGNN::calculate()
       true           // create_graph
     )[0];
     // square
-    gradients_z = torch::pow(gradients_z, 2);
+    auto gradients_z_2 = torch::pow(gradients_z, 2);
     // mass-weighting
     if (kb_weighted) {
-      auto node_masses = torch::zeros({n_atoms, 1}, torch_float_dtype);
+      std::vector<float> node_masses_vector(n_atoms);
       #pragma omp parallel for num_threads(n_threads)
       for (int i = 0; i < n_atoms; i++) {
         int index = atom_list_active[i];
         int node_type = system_node_types[getAbsoluteIndex(index).index()];
-        node_masses[i][0] = model_atomic_masses[node_type];
+        node_masses_vector[i] = model_atomic_masses[node_type];
       }
-      node_masses = node_masses.to(device);
-      gradients_z = gradients_z / node_masses;
+      torch::Tensor node_masses = torch::from_blob(
+        node_masses_vector.data(),
+        n_atoms,
+        torch::TensorOptions().dtype(torch::kFloat32)
+      );
+      node_masses = node_masses.to(device).to(torch_float_dtype);
+      node_masses = node_masses.reshape({n_atoms, 1});
+      gradients_z_2 = gradients_z_2 / node_masses;
     }
     // sum over all dims
-    auto gradients_z_sum = torch::sum(gradients_z);
+    auto gradients_z_sum = torch::sum(gradients_z_2);
     // chain rules
     auto k_bias_value = torch::ones(1, torch_float_dtype).to(device);
     if (!kb_truncated)
