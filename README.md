@@ -3,6 +3,9 @@
 ### Repo structure
 - **tutorials**: contains detailed tutorials for the training of the SelfTICA CV and the dual-cutoff GNN framework.
 - **plumed_pytorch_gnn**: contains the plumed interface for GNN-based CVs
+- **muller**:  files for Muller-Brown 2D potential using `PLUMED ves_md_linearexpansion`
+  - **models**: frozen torchscript models
+  - **run_unbiased_high-T**: input files and results of the unbiased high-temp simulations used for training.
 - **alanine**:  files for alanine dipeptide in vacuum using `Gromacs`
   - **data**: topology files
   - **models**: frozen torchscript models
