@@ -6,6 +6,8 @@
 - **muller**:  files for Muller-Brown 2D potential using `PLUMED ves_md_linearexpansion`
   - **models**: frozen torchscript models
   - **run_unbiased_high-T**: input files and results of the unbiased high-temp simulations used for training.
+  - **run_biased_NN**: input files for biased simulation using MLCVs.
+  - **run_biased_ref**: input files and results for biased simulations using p.x and p.y as CVs
 - **alanine**:  files for alanine dipeptide in vacuum using `Gromacs`
   - **data**: topology files
   - **models**: frozen torchscript models
