@@ -12,7 +12,7 @@ mueller: CUSTOM ARG=p.x,p.y PERIODIC=NO ...
 potential: BIASVALUE ARG=mueller
 
 # define nncv 
-s: PYTORCH_MODEL FILE=../../../models/SelfTICA/model_0.ptc ARG=p.x,p.y
+s: PYTORCH_MODEL FILE=../../../models/SelfTICA/model_0.ptc ARG=p.x,p.y # modify there to change the model
 
 # opes bias
 opes: OPES_METAD ARG=s.node-0 BARRIER=20 TEMP=1 PACE=500
