@@ -11,7 +11,7 @@ PYTORCH_GNN ...
   GROUPA=g1
   GROUPB=g2
   SUBGROUPA=g1
-  MODEL=../../models/DeepTDA_GNN/model_6AA.ptc
+  MODEL=../../models/DeepTDA_GNN/model_4AA.ptc # modify there to update the model
   STRUCTURE=../../data/plumed_topo.pdb
   BUFFER=0.1
   NL_STRIDE=5
