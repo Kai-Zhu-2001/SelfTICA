@@ -133,7 +133,7 @@ OPES_METAD ...
 ... OPES_METAD
 \endplumedfile
 
-The following example instructs plumed to do the same calculation as the above example, but will sample Kang's (or Kolmogorov's) transition state ensemble.
+The following example instructs plumed to do the same calculation as the above example, but will sample Kolmogorov's transition state ensemble.
 \plumedfile
 PYTORCH_GNN ...
   GROUPA=1-10
@@ -322,7 +322,7 @@ void PytorchGNN::registerKeywords(Keywords& keys)
   keys.addFlag(
     "KBIAS",
     false,
-    "Calculate Kang's bias potential $V_K$ (a.k.a. Kolmogorov's bias). Only vaild for GNN committor models"
+    "Calculate Kolmogorov's bias potential $V_K$. Only vaild for GNN committor models"
   );
 
   keys.addFlag(
@@ -346,7 +346,7 @@ void PytorchGNN::registerKeywords(Keywords& keys)
   keys.addOutputComponent(
     "kbias",
     "KBIAS",
-    "Kang's bias potential $V_K$"
+    "Kolmogorov's bias potential $V_K$"
   );
 }
 
@@ -548,7 +548,7 @@ PytorchGNN::PytorchGNN(const ActionOptions& ao):
     is_committor = model.attr("is_committor").toTensor().item<int>() != 0;
   if (!is_committor && k_bias)
     plumed_merror(
-      "Can not calculate Kang's bias potential for a non-committor model!"
+      "Can not calculate Kolmogorov's bias potential for a non-committor model!"
     );
   if (is_committor) {
     if (n_out != 2)
@@ -782,7 +782,7 @@ PytorchGNN::PytorchGNN(const ActionOptions& ao):
   else
     log.printf("no\n");
   if (is_committor) {
-    log.printf("  If sample Kang's (or Kolmogorov's) ensemble: ");
+    log.printf("  If sample Kolmogorov's ensemble: ");
     if (k_bias)
       log.printf("yes\n");
     else
