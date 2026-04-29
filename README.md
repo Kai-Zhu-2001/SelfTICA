@@ -1,34 +1,55 @@
-#### Supporting data for the paper:
+#### Supporting Data for the Paper  
 ## "Self-Supervised Learning of Slow Modes for Rare Events"
-### Repo structure
-- **tutorials**: contains detailed tutorials for the training of the SelfTICA CV and the dual-cutoff GNN framework.
-- **plumed_pytorch_gnn**: contains the plumed interface for GNN-based CVs
-- **muller**:  files for Muller-Brown 2D potential using `PLUMED ves_md_linearexpansion`
-  - **models**: frozen torchscript models
-  - **run_unbiased_high-T**: input files and results of the unbiased high-temp simulations used for training.
-  - **run_biased_NN**: input files for biased simulation using MLCVs.
-  - **run_biased_ref**: input files and results for biased simulations using p.x and p.y as CVs
-- **alanine**:  files for alanine dipeptide in vacuum using `Gromacs`
-  - **data**: topology files
-  - **models**: frozen torchscript models
-  - **run_biased_multi**: input files for multithermal simulations
-  - **run_biased_nn**: input files for biased simulations using fnn-based CVs
-  - **run_biased_gnn**: input files for biased simulations using gnn-based CVs
-  - **run_biased_ref**: input files for biased simulations using phi and psi as CVs
-- **chignolin**: files for chignolin folding in explicit water using `Gromacs`
-  - **data**: topology and force field files
-  - **models**: frozen torchscript models
-  - **run_biased_multi**: input files for multithermal simulations
-  - **run_biased_multi_gnn**: input files for multi-walker biased simulations using gnn-based SelfTICA CVs
-- **sodium**: files for sodium phase transition using `LAMMPS`
-  - **data**: topology files and force field files
-  - **models**: frozen torchscript models
-  - **run_unibased**: input files for unibased simulations in both liquid and solid states
-  - **run_biased_gnn**: input files for biased simulations using gnn-based SelfTICA CVs
-  - **run_biased_ref**: input files for biased simulations using order parameter, potential energy, and volume as CVs
-- **calixarene**: files for OAMe-G2 binding in explicit water using `Gromacs`
-  - **data**: topology files
-  - **models**: frozen torchscript models
-  - **run_unibased**: input files for unibased simulations in both bind and unbind states
-  - **run_biased_gnn**: input files for biased simulations using gnn-based SelfTICA CVs
-  - **run_biased_ref**: input files for biased simulations using order h and V2 as CVs
+
+### Repo Structure
+
+- **tutorials**  
+  Contains step-by-step tutorials for training SelfTICA collective variables (CVs), including both feed-forward and dual-cutoff GNN-based frameworks.
+
+- **plumed_pytorch_gnn**  
+  Provides the PLUMED interface for deploying PyTorch-based GNN CVs in molecular dynamics simulations.
+
+---
+
+- **muller**  
+  Files for the tri-well potential system using `PLUMED ves_md_linearexpansion`.
+  - **models**: frozen TorchScript models  
+  - **run_unbiased**: input files and trajectories from unbiased simulations at different temperatures (used for training)  
+  - **run_biased**: input files for biased simulations at $k_B T = 0.6$ used for training  
+
+---
+
+- **alanine**  
+  Files for alanine dipeptide in vacuum using `GROMACS`.
+  - **data**: topology files  
+  - **models**: frozen TorchScript models  
+  - **run_biased_multi**: input files for multithermal simulations  
+  - **run_biased_nn**: biased simulations using FNN-based CVs  
+  - **run_biased_gnn**: biased simulations using GNN-based CVs  
+
+---
+
+- **chignolin**  
+  Files for chignolin folding in explicit water using `GROMACS`.
+  - **data**: topology and force field files  
+  - **models**: frozen TorchScript models  
+  - **run_biased_explore**: input files for OPES-Explore simulations using different CVs  
+
+---
+
+- **calixarene**  
+  Files for OAMe–G2 host–guest binding in explicit water using `GROMACS`.
+  - **data**: topology files  
+  - **models**: frozen TorchScript models  
+  - **run_unbiased**: input files for unbiased simulations in both bound and unbound states  
+  - **run_biased_gnn**: biased simulations using GNN-based SelfTICA CVs  
+  - **run_biased_ref**: biased simulations using reference CVs (e.g., coordination number $h$ and $V_2$)  
+
+---
+
+- **fen2**  
+  Files for catalytic dissociation of $\mathrm{N_2}$ on Fe(111) surfaces using `LAMMPS`.
+  - **data**: topology files  
+  - **models**: frozen TorchScript models  
+  - **run_initial**: initial biased simulations used to generate training data  
+  - **run_biased_explore**: OPES-Explore simulations using different CVs  

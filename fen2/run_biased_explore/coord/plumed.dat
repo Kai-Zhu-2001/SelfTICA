@@ -1,0 +1,41 @@
+UNITS LENGTH=A ENERGY=eV
+
+# vim:ft=plumed
+LOAD FILE=../../../plumed_pytorch_gnn/PytorchModelGNN.cpp
+
+MOLINFO STRUCTURE=../../data/plumed_topo.pdb PYTHON_BIN=python
+GROUP ATOMS={@mdt:{all}} LABEL=g1
+
+#  GNN_CV
+
+PYTORCH_GNN ...
+ GROUPA=g1
+ MODEL=../../models/model.pt
+ STRUCTURE=../../data/plumed_topo.pdb
+ NL_STRIDE=5
+ LABEL=gnn
+ CUDA
+... PYTORCH_GNN
+
+n1: GROUP ATOMS=193
+n2: GROUP ATOMS=194
+
+d_n2: DISTANCE ATOMS=n1,n2
+coord: COORDINATION GROUPA=193,194 GROUPB=1-192 R_0=2.5
+
+# Define walls 
+dwall: UPPER_WALLS ARG=d_n2 AT=2.0 KAPPA=0.2 EXP=2 EPS=0.1          # (distance N-N)
+
+# BIAS
+bias: OPES_METAD_EXPLORE ...
+    ARG=coord
+    PACE=100 
+    BARRIER=1.0
+    TEMP=300 
+    RESTART=NO
+...
+
+# Print
+PRINT ARG=* STRIDE=100 FILE=COLVAR
+FLUSH STRIDE=100
+

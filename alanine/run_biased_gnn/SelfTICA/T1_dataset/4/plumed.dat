@@ -9,7 +9,7 @@ psi: TORSION ATOMS=7,9,15,17
 
 PYTORCH_GNN ...
   GROUPA=g1
-  MODEL=../../../../models/SelfTICA/GNN/T1/model_4.ptc
+  MODEL=../../../../models/std/SelfTICA/GNN/dataset1/model_4.pt
   STRUCTURE=../../../../data/plumed_topo.pdb
   NL_STRIDE=1000
   LABEL=gnn
