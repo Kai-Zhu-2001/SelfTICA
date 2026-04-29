@@ -39,7 +39,7 @@
 
 - **calixarene**  
   Files for OAMe–G2 host–guest binding in explicit water using `GROMACS`.
-  - **data**: topology files  
+  - **data**: topology and force field files  
   - **models**: frozen TorchScript models  
   - **run_unbiased**: input files for unbiased simulations in both bound and unbound states  
   - **run_biased_gnn**: biased simulations using GNN-based SelfTICA CVs  
