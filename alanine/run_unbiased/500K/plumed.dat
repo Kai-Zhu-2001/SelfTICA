@@ -1,0 +1,17 @@
+# vim:ft=plumed
+
+####################################
+#  >> Alanine Dipeptide <<
+####################################
+
+# Define CVs
+phi: TORSION ATOMS=5,7,9,15
+psi: TORSION ATOMS=7,9,15,17
+ene: ENERGY
+
+# Define descriptors
+INCLUDE FILE=../../plumed-descriptors.dat
+
+PRINT FMT=%g STRIDE=500 FILE=COLVAR ARG=*
+
+ENDPLUMED
