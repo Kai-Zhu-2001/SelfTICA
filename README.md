@@ -1,5 +1,5 @@
 #### Supporting Data for the Paper  
-## "Self-Supervised Learning of Slow Modes for Rare Events"
+## "Contrastive Learning of Dynamical Representations for Collective Variable Discovery"
 
 ### Repo Structure
 
