@@ -1,5 +1,5 @@
 #### Supporting Data for the Paper  
-## "Contrastive Learning of Dynamical Representations for Collective Variable Discovery"
+## "Contrastive Learning of Dynamical Representations for Enhanced Molecular Sampling"
 
 ### Repo Structure
 
