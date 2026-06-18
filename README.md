@@ -1,5 +1,14 @@
 #### Supporting Data for the Paper  
 ## "Contrastive Learning of Dynamical Representations for Enhanced Molecular Sampling"
+Kai Zhu, Jintu Zhang, Pietro Novelli, Tingjun Hou, Luigi Bonati
+
+[![arXiv](https://img.shields.io/badge/arXiv-2606.15495-b31b1b.svg)](https://arxiv.org/abs/2606.15495)
+
+All simulation trajectories, input files, trained models, and supporting data are available in the Hugging Face dataset repository:
+https://huggingface.co/datasets/Kai-Zhu-2001/SelfTICA
+
+The training of the models was based on the [mlcolvar library](https://github.com/luigibonati/mlcolvar), where the updated relevant code and updated example notebooks are available:
+- [didactical example: Muller-brown](https://github.com/Kai-Zhu-2001/mlcolvar/blob/selftica/docs/notebooks/tutorials/cvs_SelfTICA.ipynb)
 
 ### Repo Structure
 
