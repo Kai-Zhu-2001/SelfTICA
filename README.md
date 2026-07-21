@@ -7,8 +7,10 @@ Kai Zhu, Jintu Zhang, Pietro Novelli, Tingjun Hou, Luigi Bonati
 All simulation trajectories, input files, trained models, and supporting data are available in the Hugging Face dataset repository:
 https://huggingface.co/datasets/Kai-Zhu-2001/SelfTICA
 
-The training of the models was based on the [mlcolvar library](https://github.com/luigibonati/mlcolvar), where the updated relevant code and updated example notebooks are available:
-- [didactical example: Muller-brown](https://github.com/Kai-Zhu-2001/mlcolvar/blob/selftica/docs/notebooks/tutorials/cvs_SelfTICA.ipynb)
+The training of the models was based on the [mlcolvar library](https://github.com/luigibonati/mlcolvar), where the updated relevant code and example notebooks are available:
+
+- [SelfTICA source code](https://github.com/luigibonati/mlcolvar/blob/release/2.0/mlcolvar/cvs/timelagged/selftica.py)
+- [SelfTICA tutorial: Müller–Brown potential](https://github.com/luigibonati/mlcolvar/blob/release/2.0/docs/notebooks/tutorials/cvs_SelfTICA.ipynb)
 
 ### Repo Structure
 
