@@ -64,3 +64,8 @@ The training of the models was based on the [mlcolvar library](https://github.co
   - **models**: frozen TorchScript models  
   - **run_initial**: initial biased simulations used to generate training data  
   - **run_biased_explore**: OPES-Explore simulations using different CVs  
+
+---
+
+- **transfer**   
+  Files for transferring pretrained SelfTICA representations to committor learning for the tri-well potential, alanine dipeptide, and chignolin, including task-specific readouts, iterative refinement, and Kolmogorov-biased sampling.
