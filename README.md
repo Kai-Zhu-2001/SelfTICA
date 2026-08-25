@@ -11,6 +11,8 @@ The training of the models was based on the [mlcolvar library](https://github.co
 
 - [SelfTICA source code](https://github.com/luigibonati/mlcolvar/blob/release/2.0/mlcolvar/cvs/timelagged/selftica.py)
 - [SelfTICA tutorial: Müller–Brown potential](https://github.com/luigibonati/mlcolvar/blob/release/2.0/docs/notebooks/tutorials/cvs_SelfTICA.ipynb)
+- [Transfer learning source code](https://github.com/Kai-Zhu-2001/mlcolvar/tree/featurizer/mlcolvar/featurization/transfer)
+- [Transfer learning tutorial: pretrained representations for downstream tasks](https://github.com/Kai-Zhu-2001/mlcolvar/blob/featurizer/docs/notebooks/tutorials/adv_transfer.ipynb)
 
 ### Repo Structure
 
