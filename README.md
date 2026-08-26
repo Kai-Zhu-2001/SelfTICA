@@ -1,5 +1,5 @@
 #### Supporting Data for the Paper  
-## "Contrastive Learning of Dynamical Representations for Enhanced Molecular Sampling"
+## "SelfTICA: contrastive learning of dynamical representations for molecular rare-event sampling and characterization"
 Kai Zhu, Jintu Zhang, Pietro Novelli, Tingjun Hou, Luigi Bonati
 
 [![arXiv](https://img.shields.io/badge/arXiv-2606.15495-b31b1b.svg)](https://arxiv.org/abs/2606.15495)
