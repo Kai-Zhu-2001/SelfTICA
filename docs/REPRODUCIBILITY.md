@@ -14,8 +14,8 @@ Install the software needed for the selected system before using the commands be
 | Alanine, chignolin, and OAMe–G2 | GROMACS with PLUMED integration; OPES for the supplied biased runs |
 | Fe–N₂ | LAMMPS with `fix plumed` and the `mace` pair style; the supplied MACE potential in `fen2/data/` |
 | Neural-network CVs | PLUMED with PyTorch/LibTorch support; the matching exported model |
-| GNN CVs | The appropriate [GNN interface](../plumed_pytorch_gnn/README.md); Python with MDTraj for `@mdt` atom selections |
-| Committor-based bias | LibTorch-enabled PLUMED and [PytorchKolmogorovBias.cpp](../transfer/PytorchKolmogorovBias.cpp) |
+| GNN CVs | The appropriate [GNN interface](../plumed/README.md); Python with MDTraj for `@mdt` atom selections |
+| Committor-based bias | LibTorch-enabled PLUMED and [PytorchKolmogorovBias.cpp](../plumed/PytorchKolmogorovBias.cpp) |
 
 The [Supplementary Information](https://arxiv.org/html/2606.15495v3) reports GROMACS 2022.5 for alanine and 2024.5 for chignolin and OAMe–G2. A complete environment lockfile and a tested compatibility matrix are not included here. For training reproduction, obtain the frozen code identified in the paper from the [dataset archive](https://huggingface.co/datasets/Kai-Zhu-2001/SelfTICA); the linked mlcolvar branches may change over time.
 
@@ -30,7 +30,7 @@ The [Supplementary Information](https://arxiv.org/html/2606.15495v3) reports GRO
 | `models/*.pt` and nested model directories | Saved models; use the exact model referenced by the chosen input |
 | `COLVAR`, `COLVAR_A`, `COLVAR_B` | Tabulated CV trajectories; column names are recorded in the `#! FIELDS` header |
 
-Transfer-learning files live in `transfer/tri-well/`, `transfer/ala2/`, and `transfer/chignolin/`. Their models include pretraining checkpoints (`*model_state.pt`) and task-specific `*_q.pt` / `*_z.pt` exports. The Kolmogorov-bias inputs reference the `z` models; checkpoints are not interchangeable with simulation exports. Alanine and chignolin transfer inputs include `iter_0` and `iter_1` sampling rounds.
+Transfer-learning files live in `transfer/tri-well/`, `transfer/alanine/`, and `transfer/chignolin/`. Their models include pretraining checkpoints (`*model_state.pt`) and task-specific `*_q.pt` / `*_z.pt` exports. The Kolmogorov-bias inputs reference the `z` models; checkpoints are not interchangeable with simulation exports. Alanine and chignolin transfer inputs include `iter_0` and `iter_1` sampling rounds.
 
 ## Launch examples
 
@@ -65,11 +65,10 @@ The executable name may differ by installation. The input uses the MACE potentia
 
 ## Input compatibility notes
 
-- **GNN interfaces:** both C++ implementations register `PYTORCH_GNN`, but accept different selection keywords and model formats. Load the implementation required by the model; see the [interface guide](../plumed_pytorch_gnn/README.md).
+- **GNN interfaces:** both C++ implementations register `PYTORCH_GNN`, but accept different selection keywords and model formats. Load the implementation required by the model; see the [interface guide](../plumed/README.md).
 - **Fe–N₂ OPES-Explore inputs:** all three `fen2/run_biased_explore/` cases use `GROUPA`, while their loaded `PytorchModelGNN.cpp` accepts `SYSTEM_SELECTION`. Resolve the input/interface/model compatibility before launching these cases. They also request `CUDA`; the interface guide explains GPU requirements and CPU fallback.
 - **Chignolin transfer restarts:** the biased transfer inputs use `RESTART=YES`. The required prior bias state is not included in this checkout; supply matching restart files or prepare a consistent fresh-start input before running.
-- **OAMe–G2 static bias:** the static DeepTDA bias line in `calixanrene/run_biased_gnn/SelfTICA/plumed.dat` is commented out. Reproducing the combined-bias protocol described in the paper requires the corresponding prior OPES kernels and an appropriate kernel-file path.
-- **Archive names:** the host–guest directory is spelled `calixanrene/`, and chignolin inputs include `plumed-desctiptors.dat`. Use these exact paths when working with the archive.
+- **OAMe–G2 static bias:** the static DeepTDA bias line in `calixarene/run_biased_gnn/SelfTICA/plumed.dat` is commented out. Reproducing the combined-bias protocol described in the paper requires the corresponding prior OPES kernels and an appropriate kernel-file path.
 
 ## Recording a reproduction
 

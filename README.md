@@ -26,12 +26,12 @@ cd SelfTICA
 | [tri-well/](tri-well/) | Two-dimensional tri-well potential | Unbiased and biased simulations; SelfTICA and DeepTICA models |
 | [alanine/](alanine/) | Alanine dipeptide in vacuum | Unbiased, multithermal, and neural-network-biased simulations |
 | [chignolin/](chignolin/) | Chignolin folding in water | Structures, force field, models, and OPES-Explore inputs |
-| [calixanrene/](calixanrene/) | OAMe–G2 host–guest binding in water | Bound/unbound inputs; SelfTICA and DeepTDA GNN models and simulations |
+| [calixarene/](calixarene/) | OAMe–G2 host–guest binding in water | Bound/unbound inputs; SelfTICA and DeepTDA GNN models and simulations |
 | [fen2/](fen2/) | N₂ dissociation on Fe(111) | LAMMPS inputs, MACE potential, and OPES-Explore simulations |
-| [transfer/](transfer/) | Transfer to committor learning | Tri-well, alanine (`ala2`), and chignolin models and sampling inputs |
-| [plumed_pytorch_gnn/](plumed_pytorch_gnn/) | GNN collective variables in PLUMED | C++ interfaces and [usage notes](plumed_pytorch_gnn/README.md) |
+| [transfer/](transfer/) | Transfer to committor learning | Tri-well, alanine, and chignolin models and sampling inputs |
+| [plumed/](plumed/) | Custom PLUMED actions | GNN and committor-bias C++ interfaces with [usage notes](plumed/README.md) |
 
-`calixanrene/` retains the archive's original spelling. Within each system, `data/` holds structural inputs, `models/` holds saved models, and `run_*/` holds simulation inputs where present. CV denotes a collective variable; FNN and GNN denote feed-forward and graph neural networks.
+Within each system, `data/` holds structural inputs, `models/` holds saved models, and `run_*/` holds simulation inputs where present. Shared PLUMED interfaces live in `plumed/`. CV denotes a collective variable; FNN and GNN denote feed-forward and graph neural networks.
 
 ## Training code and tutorials
 
