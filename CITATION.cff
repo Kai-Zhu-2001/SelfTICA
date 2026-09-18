@@ -1,0 +1,35 @@
+cff-version: 1.2.0
+message: "If you use these materials, please cite the paper in preferred-citation."
+type: software
+title: "SelfTICA: supporting code, models, and simulation inputs"
+authors:
+  - family-names: Zhu
+    given-names: Kai
+  - family-names: Zhang
+    given-names: Jintu
+  - family-names: Novelli
+    given-names: Pietro
+  - family-names: Hou
+    given-names: Tingjun
+  - family-names: Bonati
+    given-names: Luigi
+repository-code: "https://github.com/Kai-Zhu-2001/SelfTICA"
+license: MIT
+preferred-citation:
+  type: article
+  title: "SelfTICA: contrastive learning of dynamical representations for rare-event sampling and characterization"
+  authors:
+    - family-names: Zhu
+      given-names: Kai
+    - family-names: Zhang
+      given-names: Jintu
+    - family-names: Novelli
+      given-names: Pietro
+    - family-names: Hou
+      given-names: Tingjun
+    - family-names: Bonati
+      given-names: Luigi
+  journal: arXiv
+  year: 2026
+  doi: "10.48550/arXiv.2606.15495"
+  url: "https://arxiv.org/abs/2606.15495"

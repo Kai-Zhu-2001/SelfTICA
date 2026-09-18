@@ -1,73 +1,53 @@
-#### Supporting Data for the Paper  
-## "SelfTICA: contrastive learning of dynamical representations for molecular rare-event sampling and characterization"
-Kai Zhu, Jintu Zhang, Pietro Novelli, Tingjun Hou, Luigi Bonati
+# SelfTICA
 
-[![arXiv](https://img.shields.io/badge/arXiv-2606.15495-b31b1b.svg)](https://arxiv.org/abs/2606.15495)
+Simulation inputs, trained models, and PLUMED interfaces for learning dynamical representations and sampling molecular rare events with SelfTICA.
 
-All simulation trajectories, input files, trained models, and supporting data are available in the Hugging Face dataset repository:
-https://huggingface.co/datasets/Kai-Zhu-2001/SelfTICA
+**Companion paper:** [SelfTICA: contrastive learning of dynamical representations for rare-event sampling and characterization](https://arxiv.org/abs/2606.15495)
 
-The training of the models was based on the [mlcolvar library](https://github.com/luigibonati/mlcolvar), where the updated relevant code and example notebooks are available:
+Kai Zhu, Jintu Zhang, Pietro Novelli, Tingjun Hou, and Luigi Bonati (2026).
 
-- [SelfTICA source code](https://github.com/luigibonati/mlcolvar/blob/release/2.0/mlcolvar/cvs/timelagged/selftica.py)
-- [SelfTICA tutorial: Müller–Brown potential](https://github.com/luigibonati/mlcolvar/blob/release/2.0/docs/notebooks/tutorials/cvs_SelfTICA.ipynb)
-- [Transfer learning source code](https://github.com/Kai-Zhu-2001/mlcolvar/tree/featurizer/mlcolvar/featurization/transfer)
-- [Transfer learning tutorial: pretrained representations for downstream tasks](https://github.com/Kai-Zhu-2001/mlcolvar/blob/featurizer/docs/notebooks/tutorials/adv_transfer.ipynb)
+[Paper](https://arxiv.org/abs/2606.15495) · [Dataset](https://huggingface.co/datasets/Kai-Zhu-2001/SelfTICA) · [Reproduction guide](docs/REPRODUCIBILITY.md) · [Citation](CITATION.cff)
 
-### Repo Structure
+## Getting started
 
-- **tutorials**  
-  Contains step-by-step tutorials for training SelfTICA collective variables (CVs), including both feed-forward and dual-cutoff GNN-based frameworks.
+1. **Learn the method:** follow the external training tutorials below.
+2. **Explore a system:** use the directory table to find its inputs and models.
+3. **Run simulations:** follow the [reproduction guide](docs/REPRODUCIBILITY.md) for dependencies, launch commands, and known input limitations.
 
-- **plumed_pytorch_gnn**  
-  Provides the PLUMED interface for deploying PyTorch-based GNN CVs in molecular dynamics simulations.
+```bash
+git clone https://github.com/Kai-Zhu-2001/SelfTICA.git
+cd SelfTICA
+```
 
----
+## Repository contents
 
-- **muller**  
-  Files for the tri-well potential system using `PLUMED ves_md_linearexpansion`.
-  - **models**: frozen TorchScript models  
-  - **run_unbiased**: input files and trajectories from unbiased simulations at different temperatures (used for training)  
-  - **run_biased**: input files for biased simulations at $k_B T = 0.6$ used for training  
+| Directory | System or purpose | Main contents |
+| --- | --- | --- |
+| [tri-well/](tri-well/) | Two-dimensional tri-well potential | Unbiased and biased simulations; SelfTICA and DeepTICA models |
+| [alanine/](alanine/) | Alanine dipeptide in vacuum | Unbiased, multithermal, and neural-network-biased simulations |
+| [chignolin/](chignolin/) | Chignolin folding in water | Structures, force field, models, and OPES-Explore inputs |
+| [calixanrene/](calixanrene/) | OAMe–G2 host–guest binding in water | Bound/unbound inputs; SelfTICA and DeepTDA GNN models and simulations |
+| [fen2/](fen2/) | N₂ dissociation on Fe(111) | LAMMPS inputs, MACE potential, and OPES-Explore simulations |
+| [transfer/](transfer/) | Transfer to committor learning | Tri-well, alanine (`ala2`), and chignolin models and sampling inputs |
+| [plumed_pytorch_gnn/](plumed_pytorch_gnn/) | GNN collective variables in PLUMED | C++ interfaces and [usage notes](plumed_pytorch_gnn/README.md) |
 
----
+`calixanrene/` retains the archive's original spelling. Within each system, `data/` holds structural inputs, `models/` holds saved models, and `run_*/` holds simulation inputs where present. CV denotes a collective variable; FNN and GNN denote feed-forward and graph neural networks.
 
-- **alanine**  
-  Files for alanine dipeptide in vacuum using `GROMACS`.
-  - **data**: topology files  
-  - **models**: frozen TorchScript models  
-  - **run_biased_multi**: input files for multithermal simulations  
-  - **run_biased_nn**: biased simulations using FNN-based CVs  
-  - **run_biased_gnn**: biased simulations using GNN-based CVs  
+## Training code and tutorials
 
----
+Training uses **mlcolvar**. The implementations and notebooks are maintained in the external repositories below.
 
-- **chignolin**  
-  Files for chignolin folding in explicit water using `GROMACS`.
-  - **data**: topology and force field files  
-  - **models**: frozen TorchScript models  
-  - **run_biased_explore**: input files for OPES-Explore simulations using different CVs  
+| Workflow | Implementation | Tutorial |
+| --- | --- | --- |
+| SelfTICA (`release/2.0`) | [Source code](https://github.com/luigibonati/mlcolvar/blob/release/2.0/mlcolvar/cvs/timelagged/selftica.py) | [Müller–Brown example](https://github.com/luigibonati/mlcolvar/blob/release/2.0/docs/notebooks/tutorials/cvs_SelfTICA.ipynb) |
+| Transfer learning (`featurizer`) | [Source code](https://github.com/Kai-Zhu-2001/mlcolvar/tree/featurizer/mlcolvar/featurization/transfer) | [Pretrained representations for downstream tasks](https://github.com/Kai-Zhu-2001/mlcolvar/blob/featurizer/docs/notebooks/tutorials/adv_transfer.ipynb) |
 
----
+## Data availability
 
-- **calixarene**  
-  Files for OAMe–G2 host–guest binding in explicit water using `GROMACS`.
-  - **data**: topology and force field files  
-  - **models**: frozen TorchScript models  
-  - **run_unbiased**: input files for unbiased simulations in both bound and unbound states  
-  - **run_biased_gnn**: biased simulations using GNN-based SelfTICA CVs  
-  - **run_biased_ref**: biased simulations using reference CVs (e.g., coordination number $h$ and $V_2$)  
+The [Hugging Face dataset](https://huggingface.co/datasets/Kai-Zhu-2001/SelfTICA) provides the associated training and simulation data. The paper's [code availability statement](https://arxiv.org/html/2606.15495v3#S6) also identifies a frozen training-code version there for reproducing the reported results. Use that version for reproduction and the linked mlcolvar branches for current tutorials.
 
----
+## Citation and license
 
-- **fen2**  
-  Files for catalytic dissociation of $\mathrm{N_2}$ on Fe(111) surfaces using `LAMMPS`.
-  - **data**: topology files  
-  - **models**: frozen TorchScript models  
-  - **run_initial**: initial biased simulations used to generate training data  
-  - **run_biased_explore**: OPES-Explore simulations using different CVs  
+Please cite the companion paper when using these materials. [CITATION.cff](CITATION.cff) contains the authors, preprint DOI, and preferred citation.
 
----
-
-- **transfer**   
-  Files for transferring pretrained SelfTICA representations to committor learning for the tri-well potential, alanine dipeptide, and chignolin, including task-specific readouts, iterative refinement, and Kolmogorov-biased sampling.
+The repository includes an [MIT license](LICENSE). Bundled third-party files retain their own license notices.

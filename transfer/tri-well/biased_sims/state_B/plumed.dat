@@ -2,7 +2,7 @@
 UNITS NATURAL
 
 # load interface for bias computation
-LOAD FILE=../../../../PytorchKolmogorovBias.cpp
+LOAD FILE=../../../PytorchKolmogorovBias.cpp
 
 p: POSITION ATOM=1 NOPBC
 ene: CUSTOM ARG=p.x,p.y PERIODIC=NO FUNC=3*exp(-x^2)*(exp(-(y-1./3.)^2)-exp(-(y-5./3.)^2))-5*exp(-y^2)*(exp(-(x-1.)^2)+exp(-(x+1.)^2))+0.2*x^4+0.2*(y-1./3.)^4
@@ -10,7 +10,7 @@ ene: CUSTOM ARG=p.x,p.y PERIODIC=NO FUNC=3*exp(-x^2)*(exp(-(y-1./3.)^2)-exp(-(y-
 pot: BIASVALUE ARG=ene
 
 # committor and committor-based bias
-deep: PYTORCH_KOLMOGOROV_BIAS FILE=../../../models/transfer_z.pt ARG=p.x,p.y LAMBDA=1 EPSILON=1e-7 BETA=1 
+deep: PYTORCH_KOLMOGOROV_BIAS FILE=../../models/transfer_z.pt ARG=p.x,p.y LAMBDA=1 EPSILON=1e-7 BETA=1
 
 # this is the total Kolmogorov bias, we express it on z for numerical reasons
 BIASVALUE ARG=deep.kbias
