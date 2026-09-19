@@ -1,0 +1,153 @@
+{
+  "version": 1,
+  "files": [
+    {
+      "source": "alanine/common/ala2.tpr",
+      "targets": [
+        "alanine/run_biased_multi/ala2.tpr"
+      ]
+    },
+    {
+      "source": "alanine/common/unbiased-plumed-descriptors.dat",
+      "targets": [
+        "alanine/run_unbiased/450K/plumed-descriptors.dat",
+        "alanine/run_unbiased/500K/plumed-descriptors.dat",
+        "alanine/run_unbiased/600K/plumed-descriptors.dat"
+      ]
+    },
+    {
+      "source": "alanine/common/unbiased-plumed.dat",
+      "targets": [
+        "alanine/run_unbiased/450K/plumed.dat",
+        "alanine/run_unbiased/500K/plumed.dat",
+        "alanine/run_unbiased/600K/plumed.dat"
+      ]
+    },
+    {
+      "source": "chignolin/common/folded.tpr",
+      "targets": [
+        "chignolin/run_biased_explore/SelfTICA/md.tpr",
+        "chignolin/run_biased_explore/SelfTICA_shaw/md.tpr",
+        "transfer/chignolin/biased/iter_0/folded/fold.tpr",
+        "transfer/chignolin/biased/iter_1/folded/fold.tpr",
+        "transfer/chignolin/unbiased/folded/fold.tpr"
+      ]
+    },
+    {
+      "source": "calixarene/common/md.tpr",
+      "targets": [
+        "calixarene/run_biased_gnn/DeepTDA/4AA/md.tpr",
+        "calixarene/run_biased_gnn/DeepTDA/5AA/md.tpr",
+        "calixarene/run_biased_gnn/DeepTDA/6AA/md.tpr",
+        "calixarene/run_biased_gnn/DeepTDA/noenv/md.tpr",
+        "calixarene/run_biased_gnn/SelfTICA/md.tpr"
+      ]
+    },
+    {
+      "source": "transfer/chignolin/common/unfolded.tpr",
+      "targets": [
+        "transfer/chignolin/biased/iter_0/unfolded/unfold.tpr",
+        "transfer/chignolin/biased/iter_1/unfolded/unfold.tpr",
+        "transfer/chignolin/unbiased/unfolded/unfold.tpr"
+      ]
+    },
+    {
+      "source": "transfer/chignolin/common/plumed-descriptors.dat",
+      "targets": [
+        "transfer/chignolin/biased/iter_0/folded/plumed-descriptors.dat",
+        "transfer/chignolin/biased/iter_0/unfolded/plumed-descriptors.dat",
+        "transfer/chignolin/biased/iter_1/folded/plumed-descriptors.dat",
+        "transfer/chignolin/biased/iter_1/unfolded/plumed-descriptors.dat",
+        "transfer/chignolin/unbiased/folded/plumed-descriptors.dat",
+        "transfer/chignolin/unbiased/unfolded/plumed-descriptors.dat"
+      ]
+    },
+    {
+      "source": "transfer/chignolin/common/plumed_position.dat",
+      "targets": [
+        "transfer/chignolin/biased/iter_0/folded/plumed_position.dat",
+        "transfer/chignolin/biased/iter_0/unfolded/plumed_position.dat",
+        "transfer/chignolin/biased/iter_1/folded/plumed_position.dat",
+        "transfer/chignolin/biased/iter_1/unfolded/plumed_position.dat",
+        "transfer/chignolin/unbiased/folded/plumed_position.dat",
+        "transfer/chignolin/unbiased/unfolded/plumed_position.dat"
+      ]
+    },
+    {
+      "source": "transfer/chignolin/common/iter_0-plumed.dat",
+      "targets": [
+        "transfer/chignolin/biased/iter_0/folded/plumed.dat",
+        "transfer/chignolin/biased/iter_0/unfolded/plumed.dat"
+      ]
+    },
+    {
+      "source": "transfer/chignolin/common/iter_1-plumed.dat",
+      "targets": [
+        "transfer/chignolin/biased/iter_1/folded/plumed.dat",
+        "transfer/chignolin/biased/iter_1/unfolded/plumed.dat"
+      ]
+    },
+    {
+      "source": "transfer/alanine/common/input.sA.tpr",
+      "targets": [
+        "transfer/alanine/biased_sims/iter_0/state_A/input.sA.tpr",
+        "transfer/alanine/biased_sims/iter_1/state_A/input.sA.tpr"
+      ]
+    },
+    {
+      "source": "transfer/alanine/common/input.sB.tpr",
+      "targets": [
+        "transfer/alanine/biased_sims/iter_0/state_B/input.sB.tpr",
+        "transfer/alanine/biased_sims/iter_1/state_B/input.sB.tpr"
+      ]
+    },
+    {
+      "source": "transfer/alanine/common/iter_0-plumed.dat",
+      "targets": [
+        "transfer/alanine/biased_sims/iter_0/state_A/plumed.dat",
+        "transfer/alanine/biased_sims/iter_0/state_B/plumed.dat"
+      ]
+    },
+    {
+      "source": "transfer/alanine/common/iter_1-plumed.dat",
+      "targets": [
+        "transfer/alanine/biased_sims/iter_1/state_A/plumed.dat",
+        "transfer/alanine/biased_sims/iter_1/state_B/plumed.dat"
+      ]
+    },
+    {
+      "source": "fen2/common/in.lammps",
+      "targets": [
+        "fen2/run_biased_explore/SelfTICA/in.lammps",
+        "fen2/run_biased_explore/coord/in.lammps",
+        "fen2/run_biased_explore/d_n2/in.lammps"
+      ]
+    },
+    {
+      "source": "tri-well/common/md_potential",
+      "targets": [
+        "transfer/tri-well/biased_sims/state_A/md_potential",
+        "transfer/tri-well/biased_sims/state_B/md_potential",
+        "transfer/tri-well/unbiased_sims/state_A/md_potential",
+        "transfer/tri-well/unbiased_sims/state_B/md_potential",
+        "tri-well/run_biased/p.x+0.6kbt/md_potential",
+        "tri-well/run_biased/p.y+0.6kbt/md_potential",
+        "tri-well/run_unbiased/1.0kbt/md_potential"
+      ]
+    },
+    {
+      "source": "tri-well/common/biased-md_input",
+      "targets": [
+        "tri-well/run_biased/p.x+0.6kbt/md_input",
+        "tri-well/run_biased/p.y+0.6kbt/md_input"
+      ]
+    },
+    {
+      "source": "transfer/tri-well/common/biased-plumed.dat",
+      "targets": [
+        "transfer/tri-well/biased_sims/state_A/plumed.dat",
+        "transfer/tri-well/biased_sims/state_B/plumed.dat"
+      ]
+    }
+  ]
+}

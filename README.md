@@ -12,12 +12,16 @@ Kai Zhu, Jintu Zhang, Pietro Novelli, Tingjun Hou, and Luigi Bonati (2026).
 
 1. **Learn the method:** follow the external training tutorials below.
 2. **Explore a system:** use the directory table to find its inputs and models.
-3. **Run simulations:** follow the [reproduction guide](docs/REPRODUCIBILITY.md) for dependencies, launch commands, and known input limitations.
+3. **Prepare simulation inputs:** from the repository root, use `python scripts/prepare_runs.py --list` to see generated-input targets and `python scripts/prepare_runs.py --run REPO_RELATIVE_RUN_DIRECTORY` to prepare one exact run directory.
+4. **Run simulations:** follow the [reproduction guide](docs/REPRODUCIBILITY.md) for dependencies, launch commands, and known input limitations.
 
 ```bash
 git clone https://github.com/Kai-Zhu-2001/SelfTICA.git
 cd SelfTICA
+python scripts/prepare_runs.py --check
 ```
+
+Preparation requires Python 3.9 or newer. Canonical shared inputs live in each system's `common/` directory; alanine's generated configurations are defined by `alanine/experiments.csv` and `alanine/templates/`. The preparation command restores generated inputs at their original run paths, where existing launch conventions and run-local outputs continue to work. See the reproduction guide before editing or refreshing a generated file.
 
 ## Repository contents
 

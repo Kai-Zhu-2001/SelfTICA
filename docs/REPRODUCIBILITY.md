@@ -32,13 +32,31 @@ The [Supplementary Information](https://arxiv.org/html/2606.15495v3) reports GRO
 
 Transfer-learning files live in `transfer/tri-well/`, `transfer/alanine/`, and `transfer/chignolin/`. Their models include pretraining checkpoints (`*model_state.pt`) and task-specific `*_q.pt` / `*_z.pt` exports. The Kolmogorov-bias inputs reference the `z` models; checkpoints are not interchangeable with simulation exports. Alanine and chignolin transfer inputs include `iter_0` and `iter_1` sampling rounds.
 
+## Preparing generated inputs
+
+Some repeated simulation inputs are generated at their historical run paths before launch. Use Python 3.9 or newer and invoke the preparation CLI from the repository root:
+
+```bash
+python scripts/prepare_runs.py --list
+python scripts/prepare_runs.py --check
+python scripts/prepare_runs.py --run REPO_RELATIVE_RUN_DIRECTORY
+python scripts/prepare_runs.py --all
+```
+
+`--list` shows preparation targets only. `--check` validates the full catalog without writing, `--run` prepares one exact leaf run directory, and `--all` prepares every catalog entry. The shared-file catalog is `scripts/shared-inputs.json`. Canonical files live in each system's `common/` directory, while the 120 alanine experiments are recorded in `alanine/experiments.csv` and rendered from `alanine/templates/fnn.dat.in` or `alanine/templates/gnn.dat.in`. The templates' only placeholder is `@MODEL_PATH@`.
+
+Generated inputs are ignored by Git. For lasting changes, edit the shared source, template, or CSV rather than its generated copy. A shared file can contain paths relative to its destination run directory; do not execute inputs directly from `common/`. Models, scientific data, numerical settings, and simulation dependencies remain unchanged by preparation.
+
+Preparation is safe to repeat: an identical existing file is skipped. If any selected destination differs, the command aborts before writing any selected files. To refresh a deliberately changed generated input, manually move that specific file aside and run preparation again; avoid broad cleanup commands. Run simulations in an independent working copy because archived and newly produced outputs share run directories. Keeping each simulation in its original run directory preserves relative references and isolates its outputs from other runs.
+
 ## Launch examples
 
-Use a separate working copy of the repository for simulations: some run directories already contain archived `COLVAR` files, and simulations write into the current directory. Keep the directory layout so that relative paths to models, structures, and C++ sources resolve. Each command block below starts from the root of that working copy.
+Use a separate working copy of the repository for simulations: some run directories already contain archived `COLVAR` files, and simulations write into the current directory. Keep the directory layout so that relative paths to models, structures, and C++ sources resolve. Each command block below starts from the root of that working copy and prepares the selected generated inputs before changing directories.
 
 ### Tri-well: unbiased dynamics
 
 ```bash
+python scripts/prepare_runs.py --run tri-well/run_unbiased/1.0kbt
 cd tri-well/run_unbiased/1.0kbt
 plumed ves_md_linearexpansion md_input
 ```
@@ -48,6 +66,7 @@ This example requires no neural-network model. The archived input requests 10,00
 ### Alanine: unbiased dynamics at 500 K
 
 ```bash
+python scripts/prepare_runs.py --run alanine/run_unbiased/500K
 cd alanine/run_unbiased/500K
 gmx mdrun -s ala2.tpr -plumed plumed.dat -deffnm md
 ```
@@ -55,6 +74,8 @@ gmx mdrun -s ala2.tpr -plumed plumed.dat -deffnm md
 Use a GROMACS executable with PLUMED integration that can read the supplied `.tpr`. This input writes torsions, energy, and distance descriptors to `COLVAR`. Other GROMACS runs use the `.tpr` in their own directory (for example, `md.tpr`, `fold.tpr`, or `input.sA.tpr`) and may require custom actions and models.
 
 ### Fe–N₂: initial sampling
+
+`fen2/run_initial` is unchanged and does not need preparation.
 
 ```bash
 cd fen2/run_initial
