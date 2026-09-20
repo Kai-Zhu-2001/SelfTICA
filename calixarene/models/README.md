@@ -8,7 +8,7 @@ Exported GNN collective-variable models used in the OAMe–G2 host–guest bench
 | `DeepTDA/model_4AA.pt` | DeepTDA model variant |
 | `DeepTDA/model_5AA.pt` | DeepTDA model variant |
 | `DeepTDA/model_6AA.pt` | DeepTDA model variant |
-| `DeepTDA/model_noenv.pt` | DeepTDA model variant without the environment representation used by the other variants |
+| `DeepTDA/model_noenv.pt` | DeepTDA model variant labelled `noenv` in the archived workflow |
 
 The filenames identify distinct archived model variants; use the exact model referenced by the corresponding simulation input.
 

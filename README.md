@@ -16,6 +16,8 @@ cd SelfTICA
 python scripts/prepare_runs.py --check
 ```
 
+Input preparation requires Python 3.9 or newer.
+
 Some repeated inputs are generated from canonical shared files before launch. Use
 
 ```bash
