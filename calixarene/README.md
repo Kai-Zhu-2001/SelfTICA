@@ -1,6 +1,6 @@
-# OAMe-G2 host-guest system
+# OAMe–G2 host–guest system
 
-Inputs, models, and simulations for the OAMe-G2 host-guest binding benchmark.
+Inputs, models, and simulations for the OAMe–G2 host–guest binding benchmark.
 
 ## Contents
 

@@ -1,6 +1,6 @@
-# Fe-N2 model
+# Fe–N₂ model
 
-This directory contains the exported neural-network collective-variable model used in the N2/Fe(111) benchmark.
+This directory contains the exported neural-network collective-variable model used in the N₂/Fe(111) benchmark.
 
 | File | Description |
 | --- | --- |
@@ -8,4 +8,4 @@ This directory contains the exported neural-network collective-variable model us
 
 Use the model together with the matching PLUMED interface and atom-selection syntax.
 
-See the parent [Fe-N2 README](../README.md), the [PLUMED interface guide](../../plumed/README.md), and the [reproduction guide](../../docs/REPRODUCIBILITY.md).
+See the parent [Fe–N₂ README](../README.md), the [PLUMED interface guide](../../plumed/README.md), and the [reproduction guide](../../docs/REPRODUCIBILITY.md).

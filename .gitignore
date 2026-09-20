@@ -1,4 +1,13 @@
 __pycache__/
+*.pyc
+
+# Local development artifacts
+.venv/
+.pytest_cache/
+.coverage
+.DS_Store
+.vscode/
+.idea/
 
 # Generated alanine experiment inputs
 /alanine/run_biased_nn/*/*/*/ala2.tpr

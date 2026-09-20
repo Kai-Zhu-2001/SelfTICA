@@ -1,6 +1,6 @@
-# OAMe-G2 models
+# OAMe–G2 models
 
-Exported GNN collective-variable models used in the OAMe-G2 host-guest benchmark.
+Exported GNN collective-variable models used in the OAMe–G2 host–guest benchmark.
 
 | Path | Description |
 | --- | --- |
@@ -12,4 +12,4 @@ Exported GNN collective-variable models used in the OAMe-G2 host-guest benchmark
 
 The filenames identify distinct archived model variants; use the exact model referenced by the corresponding simulation input.
 
-See the parent [OAMe-G2 README](../README.md), the [PLUMED interface guide](../../plumed/README.md), and the [reproduction guide](../../docs/REPRODUCIBILITY.md).
+See the parent [OAMe–G2 README](../README.md), the [PLUMED interface guide](../../plumed/README.md), and the [reproduction guide](../../docs/REPRODUCIBILITY.md).

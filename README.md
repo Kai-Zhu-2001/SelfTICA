@@ -32,8 +32,8 @@ from the repository root when required. Keep simulations in their original direc
 | [tri-well/](tri-well/) | Two-dimensional tri-well potential; unbiased and biased sampling |
 | [alanine/](alanine/) | Alanine dipeptide; unbiased, multithermal, and learned-CV simulations |
 | [chignolin/](chignolin/) | Chignolin folding; learned slow modes and OPES-Explore sampling |
-| [calixarene/](calixarene/) | OAMe-G2 host-guest binding with GNN collective variables |
-| [fen2/](fen2/) | N2 dissociation on Fe(111) with LAMMPS, MACE, and OPES-Explore |
+| [calixarene/](calixarene/) | OAMe–G2 host–guest binding with GNN collective variables |
+| [fen2/](fen2/) | N₂ dissociation on Fe(111) with LAMMPS, MACE, and OPES-Explore |
 | [transfer/](transfer/) | Transfer of pretrained SelfTICA representations to committor learning |
 | [plumed/](plumed/) | Custom GNN and committor-bias PLUMED interfaces |
 | [docs/](docs/) | Reproduction notes and software/input conventions |
@@ -46,7 +46,7 @@ Training uses **mlcolvar**. The implementations and tutorials are maintained sep
 
 | Workflow | Implementation | Tutorial |
 | --- | --- | --- |
-| SelfTICA (`release/2.0`) | [Source code](https://github.com/luigibonati/mlcolvar/blob/release/2.0/mlcolvar/cvs/timelagged/selftica.py) | [Muller-Brown example](https://github.com/luigibonati/mlcolvar/blob/release/2.0/docs/notebooks/tutorials/cvs_SelfTICA.ipynb) |
+| SelfTICA (`release/2.0`) | [Source code](https://github.com/luigibonati/mlcolvar/blob/release/2.0/mlcolvar/cvs/timelagged/selftica.py) | [Müller–Brown example](https://github.com/luigibonati/mlcolvar/blob/release/2.0/docs/notebooks/tutorials/cvs_SelfTICA.ipynb) |
 | Transfer learning (`featurizer`) | [Source code](https://github.com/Kai-Zhu-2001/mlcolvar/tree/featurizer/mlcolvar/featurization/transfer) | [Pretrained representations for downstream tasks](https://github.com/Kai-Zhu-2001/mlcolvar/blob/featurizer/docs/notebooks/tutorials/adv_transfer.ipynb) |
 
 ## Data, citation, and license

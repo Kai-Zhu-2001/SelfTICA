@@ -1,6 +1,6 @@
-# N2 dissociation on Fe(111)
+# N₂ dissociation on Fe(111)
 
-Inputs, trained models, and simulations for the N2/Fe(111) dissociation benchmark.
+Inputs, trained models, and simulations for the N₂/Fe(111) dissociation benchmark.
 
 ## Contents
 
