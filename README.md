@@ -53,6 +53,6 @@ Training uses **mlcolvar**. The implementations and tutorials are maintained sep
 
 ## Data, citation, and license
 
-The associated training and simulation data are available from the [Hugging Face dataset](https://huggingface.co/datasets/Kai-Zhu-2001/SelfTICA). For strict reproduction, use the frozen training-code version identified by the paper and dataset archive.
+This GitHub repository intentionally tracks the simulation inputs, trained models, and interfaces needed to reproduce the workflows, while large runtime outputs such as `COLVAR` trajectories are kept in the associated [Hugging Face dataset](https://huggingface.co/datasets/Kai-Zhu-2001/SelfTICA). For strict reproduction, use the frozen training-code version identified by the paper and dataset archive.
 
 Please cite the companion paper when using these materials. [CITATION.cff](CITATION.cff) contains the preferred citation. The repository is distributed under the [MIT license](LICENSE); bundled third-party files retain their own license notices.

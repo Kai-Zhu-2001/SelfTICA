@@ -9,6 +9,9 @@ __pycache__/
 .vscode/
 .idea/
 
+# Runtime simulation outputs archived separately
+**/COLVAR*
+
 # Generated alanine experiment inputs
 /alanine/run_biased_nn/*/*/*/ala2.tpr
 /alanine/run_biased_nn/*/*/*/plumed.dat
