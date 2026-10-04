@@ -8,12 +8,14 @@ Inputs, trained models, and simulation files for the alanine dipeptide benchmark
 | --- | --- |
 | `common/` | Canonical shared simulation inputs used to prepare individual runs |
 | `data/` | Structural and simulation data |
-| `models/` | Trained SelfTICA models, including temperature- and lag-time-dependent models |
+| `models/` | Tracked temperature- and lag-time-dependent models; repeated benchmark checkpoints are archived on Hugging Face |
 | `run_unbiased/` | Unbiased simulations at different temperatures |
 | `run_biased_multi/` | Multithermal and biased-sampling calculations |
 | `templates/` | Templates used to generate repeated FNN and GNN PLUMED inputs |
 | `experiments.csv` | Definitions of generated alanine experiments |
 | `plumed-descriptors.dat` | Descriptor definitions used for model training and analysis |
+
+The 120 repeated alanine benchmark checkpoints are stored in the [Hugging Face dataset](https://huggingface.co/datasets/Kai-Zhu-2001/SelfTICA/tree/main/alanine/models/replicates). Download them to `alanine/models/replicates/` before preparing the corresponding learned-CV runs.
 
 Some run inputs are generated from the canonical files and templates. From the repository root, use
 

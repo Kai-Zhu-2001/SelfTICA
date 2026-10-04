@@ -102,7 +102,8 @@ class PrepareRunsTests(unittest.TestCase):
         self.assertFalse((self.root / FNN_RUN / "ala2.tpr").exists())
         self.assertFalse((self.root / GNN_RUN).exists())
 
-    def test_check_and_list_do_not_materialize_inputs(self):
+    def test_check_and_list_do_not_require_external_replicate_models(self):
+        shutil.rmtree(self.root / "alanine/models/replicates")
         self.assert_success(self.run_cli("--check"))
         result = self.run_cli("--list")
         self.assert_success(result)
@@ -115,6 +116,7 @@ class PrepareRunsTests(unittest.TestCase):
         result = self.run_cli("--all")
         self.assertNotEqual(result.returncode, 0)
         self.assertIn("model_3.pt", result.stderr)
+        self.assertIn("huggingface.co", result.stderr)
         self.assertFalse((self.root / FNN_RUN).exists())
 
     def test_unknown_run_is_rejected_without_writes(self):

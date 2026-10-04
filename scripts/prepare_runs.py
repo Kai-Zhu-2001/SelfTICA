@@ -12,6 +12,10 @@ import re
 ROOT = Path(__file__).resolve().parents[1]
 PLACEHOLDER = "@MODEL_PATH@"
 FIELDS = ["run_dir", "architecture", "method", "dataset", "replica", "model"]
+ALANINE_REPLICATE_MODELS_URL = (
+    "https://huggingface.co/datasets/Kai-Zhu-2001/SelfTICA/"
+    "tree/main/alanine/models/replicates"
+)
 
 
 def repo_path(root, name):
@@ -27,19 +31,22 @@ def repo_path(root, name):
     return path
 
 
-def verify_template_references(root, run_dir, rendered):
-    """Check input references while leaving PRINT output names to the simulation."""
+def verify_template_references(root, run_dir, rendered, optional_paths=()):
+    """Check input references while allowing explicitly external archived files."""
+    optional_paths = {path.resolve() for path in optional_paths}
     for line in rendered.splitlines():
         line = line.split("#", 1)[0].strip()
         if line.startswith("PRINT"):
             continue
         for reference in re.findall(r"\b(?:FILE|MODEL|STRUCTURE|REFERENCE)=([^\s]+)", line):
             path = (run_dir / reference).resolve()
-            if not path.is_relative_to(root.resolve()) or not path.is_file():
-                raise ValueError(f"Missing or out-of-repository template input: {reference}")
+            if not path.is_relative_to(root.resolve()):
+                raise ValueError(f"Out-of-repository template input: {reference}")
+            if not path.is_file() and path not in optional_paths:
+                raise ValueError(f"Missing template input: {reference}")
 
 
-def build_inputs(root):
+def build_inputs(root, allow_missing_replicate_models=False):
     """Validate the source catalog and return destination paths and file contents."""
     inputs = {}
     sources = set()
@@ -90,13 +97,24 @@ def build_inputs(root):
             if row["model"] != expected_model:
                 raise ValueError(f"Model does not match experiment identity: {row['model']}")
             model = repo_path(root, row["model"])
-            if not model.is_file():
-                raise ValueError(f"Missing model: {row['model']}")
-            sources.add(model.resolve())
+            if model.is_file():
+                sources.add(model.resolve())
+            elif not allow_missing_replicate_models:
+                raise ValueError(
+                    f"Missing model: {row['model']}. "
+                    f"Download the alanine replicate checkpoints from "
+                    f"{ALANINE_REPLICATE_MODELS_URL}"
+                )
             run_dir = repo_path(root, row["run_dir"])
             relative_model = Path(os.path.relpath(model, run_dir)).as_posix()
             rendered = templates[architecture].replace(PLACEHOLDER, relative_model)
-            verify_template_references(root, run_dir, rendered)
+            optional_paths = [model] if allow_missing_replicate_models else []
+            verify_template_references(
+                root,
+                run_dir,
+                rendered,
+                optional_paths=optional_paths,
+            )
             add(row["run_dir"] + "/plumed.dat", rendered.encode("utf-8"))
             add(row["run_dir"] + "/ala2.tpr", tpr)
         if not count:
@@ -136,7 +154,10 @@ def main():
     action.add_argument("--all", action="store_true", help="prepare every run in the catalog")
     args = parser.parse_args()
     try:
-        inputs = build_inputs(ROOT)
+        inputs = build_inputs(
+            ROOT,
+            allow_missing_replicate_models=args.check or args.list,
+        )
         runs = sorted({path.parent.relative_to(ROOT).as_posix() for path in inputs})
         if args.list:
             print("\n".join(runs))
