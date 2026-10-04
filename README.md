@@ -51,7 +51,6 @@ The core SelfTICA and reusable-representation implementations live in **mlcolvar
 | SelfTICA | [`mlcolvar/cvs/timelagged/selftica.py`](https://github.com/luigibonati/mlcolvar/blob/release/2.0/mlcolvar/cvs/timelagged/selftica.py) | [SelfTICA tutorial](https://github.com/luigibonati/mlcolvar/blob/release/2.0/docs/notebooks/tutorials/cvs_SelfTICA.ipynb) |
 | Reusable representation framework | [`mlcolvar/representation/`](https://github.com/Kai-Zhu-2001/mlcolvar/tree/featurizer/mlcolvar/representation) | [PR #283](https://github.com/luigibonati/mlcolvar/pull/283) |
 | MLColvarRepresentation | [`representation/mlcolvar.py`](https://github.com/Kai-Zhu-2001/mlcolvar/blob/featurizer/mlcolvar/representation/mlcolvar.py) | [Transfer-learning tutorial](https://github.com/Kai-Zhu-2001/mlcolvar/blob/featurizer/docs/notebooks/tutorials/adv_transfer_mlcolvar.ipynb) |
-| MACERepresentation and atom-level transforms | [`representation/mace.py`](https://github.com/Kai-Zhu-2001/mlcolvar/blob/featurizer/mlcolvar/representation/mace.py) · [`representation/transforms.py`](https://github.com/Kai-Zhu-2001/mlcolvar/blob/featurizer/mlcolvar/representation/transforms.py) | [PR #283](https://github.com/luigibonati/mlcolvar/pull/283) |
 
 The representation framework is currently developed in the `featurizer` branch through PR #283 and targets `mlcolvar` `release/2.0`. Links can be updated to the release branch after that PR is merged.
 
