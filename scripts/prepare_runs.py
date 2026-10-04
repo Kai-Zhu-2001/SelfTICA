@@ -85,7 +85,7 @@ def build_inputs(root):
             architecture = row["architecture"]
             if architecture not in templates or not row["replica"].isdigit():
                 raise ValueError(f"Invalid architecture or replica at CSV line {reader.line_num}")
-            expected_model = (f"alanine/models/std/{row['method']}/{architecture}/"
+            expected_model = (f"alanine/models/replicates/{row['method']}/{architecture}/"
                               f"{row['dataset']}/model_{row['replica']}.pt")
             if row["model"] != expected_model:
                 raise ValueError(f"Model does not match experiment identity: {row['model']}")
