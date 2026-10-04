@@ -34,7 +34,13 @@ Transfer-learning files live in `transfer/tri-well/`, `transfer/alanine/`, and `
 
 ## Preparing generated inputs
 
-Some repeated simulation inputs are generated at their historical run paths before launch. Use Python 3.9 or newer and invoke the preparation CLI from the repository root:
+Some repeated simulation inputs are generated at their historical run paths before launch. The 120 alanine replicate checkpoints used by the generated FNN/GNN benchmark runs are archived on Hugging Face rather than tracked in Git. Restore them at their expected local paths with:
+
+```bash
+hf download Kai-Zhu-2001/SelfTICA --repo-type dataset --include "alanine/models/replicates/**" --local-dir .
+```
+
+Use Python 3.9 or newer and invoke the preparation CLI from the repository root:
 
 ```bash
 python scripts/prepare_runs.py --list
@@ -43,7 +49,7 @@ python scripts/prepare_runs.py --run REPO_RELATIVE_RUN_DIRECTORY
 python scripts/prepare_runs.py --all
 ```
 
-`--list` shows preparation targets only. `--check` validates the full catalog without writing, `--run` prepares one exact leaf run directory, and `--all` prepares every catalog entry. The shared-file catalog is `scripts/shared-inputs.json`. Canonical files live in each system's `common/` directory, while the 120 alanine experiments are recorded in `alanine/experiments.csv` and rendered from `alanine/templates/fnn.dat.in` or `alanine/templates/gnn.dat.in`. The templates' only placeholder is `@MODEL_PATH@`.
+`--list` shows preparation targets only. `--check` validates the catalog structure and tracked dependencies without requiring the externally archived alanine replicate checkpoints. `--run` prepares one exact leaf run directory, and `--all` prepares every catalog entry; these preparation modes require any referenced replicate checkpoint to be present locally. The shared-file catalog is `scripts/shared-inputs.json`. Canonical files live in each system's `common/` directory, while the 120 alanine experiments are recorded in `alanine/experiments.csv` and rendered from `alanine/templates/fnn.dat.in` or `alanine/templates/gnn.dat.in`. The templates' only placeholder is `@MODEL_PATH@`.
 
 Generated inputs are ignored by Git. For lasting changes, edit the shared source, template, or CSV rather than its generated copy. A shared file can contain paths relative to its destination run directory; do not execute inputs directly from `common/`. Models, scientific input data, numerical settings, and simulation dependencies remain unchanged by preparation.
 

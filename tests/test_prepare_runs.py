@@ -27,8 +27,8 @@ class PrepareRunsTests(unittest.TestCase):
         self.put("alanine/plumed-descriptors.dat", b"d1: DISTANCE ATOMS=2,5\n")
         self.put("plumed/PytorchGNN.cpp", b"// custom interface\n")
         self.put("alanine/data/plumed_topo.pdb", b"structure\n")
-        self.put("alanine/models/std/DeepTICA/FNN/dataset1/model_0.pt", b"fnn model")
-        self.put("alanine/models/std/SelfTICA/GNN/dataset2/model_3.pt", b"gnn model")
+        self.put("alanine/models/replicates/DeepTICA/FNN/dataset1/model_0.pt", b"fnn model")
+        self.put("alanine/models/replicates/SelfTICA/GNN/dataset2/model_3.pt", b"gnn model")
         self.put("alanine/templates/fnn.dat.in", (
             "INCLUDE FILE=../../../../plumed-descriptors.dat\n"
             "deep: PYTORCH_MODEL FILE=@MODEL_PATH@ ARG=d1\n"
@@ -48,9 +48,9 @@ class PrepareRunsTests(unittest.TestCase):
             writer = csv.writer(stream)
             writer.writerow(["run_dir", "architecture", "method", "dataset", "replica", "model"])
             writer.writerow([FNN_RUN, "FNN", "DeepTICA", "dataset1", "0",
-                             "alanine/models/std/DeepTICA/FNN/dataset1/model_0.pt"])
+                             "alanine/models/replicates/DeepTICA/FNN/dataset1/model_0.pt"])
             writer.writerow([GNN_RUN, "GNN", "SelfTICA", "dataset2", "3",
-                             "alanine/models/std/SelfTICA/GNN/dataset2/model_3.pt"])
+                             "alanine/models/replicates/SelfTICA/GNN/dataset2/model_3.pt"])
 
     def put(self, name, content):
         path = self.root / name
@@ -71,7 +71,7 @@ class PrepareRunsTests(unittest.TestCase):
         self.assert_success(self.run_cli("--run", FNN_RUN))
         self.assertEqual((self.root / FNN_RUN / "plumed.dat").read_text(),
                          "INCLUDE FILE=../../../../plumed-descriptors.dat\n"
-                         "deep: PYTORCH_MODEL FILE=../../../../models/std/DeepTICA/FNN/dataset1/model_0.pt ARG=d1\n"
+                         "deep: PYTORCH_MODEL FILE=../../../../models/replicates/DeepTICA/FNN/dataset1/model_0.pt ARG=d1\n"
                          "PRINT FILE=COLVAR ARG=*\n")
         self.assertEqual((self.root / FNN_RUN / "ala2.tpr").read_bytes(), b"original\x00TPR\xff")
         self.assertFalse((self.root / GNN_RUN).exists())
@@ -79,7 +79,7 @@ class PrepareRunsTests(unittest.TestCase):
 
     def test_all_prepares_both_architectures_and_shared_inputs(self):
         self.assert_success(self.run_cli("--all"))
-        self.assertIn("MODEL=../../../../models/std/SelfTICA/GNN/dataset2/model_3.pt",
+        self.assertIn("MODEL=../../../../models/replicates/SelfTICA/GNN/dataset2/model_3.pt",
                       (self.root / GNN_RUN / "plumed.dat").read_text())
         self.assertEqual((self.root / "tri-well/run_unbiased/1.0kbt/md_potential").read_bytes(),
                          b"potential coefficients\n")
@@ -102,7 +102,8 @@ class PrepareRunsTests(unittest.TestCase):
         self.assertFalse((self.root / FNN_RUN / "ala2.tpr").exists())
         self.assertFalse((self.root / GNN_RUN).exists())
 
-    def test_check_and_list_do_not_materialize_inputs(self):
+    def test_check_and_list_do_not_require_external_replicate_models(self):
+        shutil.rmtree(self.root / "alanine/models/replicates")
         self.assert_success(self.run_cli("--check"))
         result = self.run_cli("--list")
         self.assert_success(result)
@@ -111,10 +112,11 @@ class PrepareRunsTests(unittest.TestCase):
         self.assertFalse((self.root / FNN_RUN).exists())
 
     def test_missing_model_prevents_preparation(self):
-        (self.root / "alanine/models/std/SelfTICA/GNN/dataset2/model_3.pt").unlink()
+        (self.root / "alanine/models/replicates/SelfTICA/GNN/dataset2/model_3.pt").unlink()
         result = self.run_cli("--all")
         self.assertNotEqual(result.returncode, 0)
         self.assertIn("model_3.pt", result.stderr)
+        self.assertIn("huggingface.co", result.stderr)
         self.assertFalse((self.root / FNN_RUN).exists())
 
     def test_unknown_run_is_rejected_without_writes(self):

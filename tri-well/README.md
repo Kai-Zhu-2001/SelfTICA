@@ -9,7 +9,7 @@ Inputs, models, and simulations for the two-dimensional tri-well benchmark.
 | `common/` | Canonical shared simulation inputs |
 | `models/unbiased/` | Models trained from unbiased data |
 | `models/biased/` | Models trained from biased data |
-| `models/std/` | Additional reference models |
+| `models/replicates/` | Additional reference models |
 | `run_unbiased/` | Unbiased simulation inputs |
 | `run_biased/` | Enhanced-sampling inputs using learned collective variables |
 

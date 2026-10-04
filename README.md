@@ -42,17 +42,21 @@ from the repository root when required. Keep simulations in their original direc
 
 Each system directory contains its own README describing the local data, models, and run directories.
 
-## Training code and tutorials
+## Method implementations and tutorials
 
-Training uses **mlcolvar**. The implementations and tutorials are maintained separately:
+The core SelfTICA and reusable-representation implementations live in **mlcolvar**, while this repository contains the trained models, simulation inputs, and reproduction workflows.
 
-| Workflow | Implementation | Tutorial |
+| Component | Source code | Tutorial / development |
 | --- | --- | --- |
-| SelfTICA (`release/2.0`) | [Source code](https://github.com/luigibonati/mlcolvar/blob/release/2.0/mlcolvar/cvs/timelagged/selftica.py) | [Müller–Brown example](https://github.com/luigibonati/mlcolvar/blob/release/2.0/docs/notebooks/tutorials/cvs_SelfTICA.ipynb) |
-| Transfer learning (`featurizer`) | [Source code](https://github.com/Kai-Zhu-2001/mlcolvar/tree/featurizer/mlcolvar/featurization/transfer) | [Pretrained representations for downstream tasks](https://github.com/Kai-Zhu-2001/mlcolvar/blob/featurizer/docs/notebooks/tutorials/adv_transfer.ipynb) |
+| SelfTICA | [`mlcolvar/cvs/timelagged/selftica.py`](https://github.com/luigibonati/mlcolvar/blob/release/2.0/mlcolvar/cvs/timelagged/selftica.py) | [SelfTICA tutorial](https://github.com/luigibonati/mlcolvar/blob/release/2.0/docs/notebooks/tutorials/cvs_SelfTICA.ipynb) |
+| Reusable representation framework | [`mlcolvar/representation/`](https://github.com/Kai-Zhu-2001/mlcolvar/tree/featurizer/mlcolvar/representation) | [PR #283](https://github.com/luigibonati/mlcolvar/pull/283) |
+| MLColvarRepresentation | [`representation/mlcolvar.py`](https://github.com/Kai-Zhu-2001/mlcolvar/blob/featurizer/mlcolvar/representation/mlcolvar.py) | [Transfer-learning tutorial](https://github.com/Kai-Zhu-2001/mlcolvar/blob/featurizer/docs/notebooks/tutorials/adv_transfer_mlcolvar.ipynb) |
+| MACERepresentation and atom-level transforms | [`representation/mace.py`](https://github.com/Kai-Zhu-2001/mlcolvar/blob/featurizer/mlcolvar/representation/mace.py) · [`representation/transforms.py`](https://github.com/Kai-Zhu-2001/mlcolvar/blob/featurizer/mlcolvar/representation/transforms.py) | [PR #283](https://github.com/luigibonati/mlcolvar/pull/283) |
+
+The representation framework is currently developed in the `featurizer` branch through PR #283 and targets `mlcolvar` `release/2.0`. Links can be updated to the release branch after that PR is merged.
 
 ## Data, citation, and license
 
-This GitHub repository intentionally tracks the simulation inputs, trained models, and interfaces needed to reproduce the workflows, while large runtime outputs such as `COLVAR` trajectories are kept in the associated [Hugging Face dataset](https://huggingface.co/datasets/Kai-Zhu-2001/SelfTICA). For strict reproduction, use the frozen training-code version identified by the paper and dataset archive.
+This GitHub repository intentionally tracks the simulation inputs, essential trained models, and interfaces needed to reproduce the workflows. Large runtime outputs such as `COLVAR` trajectories and the 120 alanine replicate benchmark checkpoints are kept in the associated [Hugging Face dataset](https://huggingface.co/datasets/Kai-Zhu-2001/SelfTICA). For strict reproduction, use the frozen training-code version identified by the paper and dataset archive.
 
 Please cite the companion paper when using these materials. [CITATION.cff](CITATION.cff) contains the preferred citation. The repository is distributed under the [MIT license](LICENSE); bundled third-party files retain their own license notices.
